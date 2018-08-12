@@ -1,0 +1,3 @@
+# my_faster_rcnn
+
+simple and short codes, could run on windows but the training procedure does not work well, to be continued...
