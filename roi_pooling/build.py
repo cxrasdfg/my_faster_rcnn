@@ -10,14 +10,14 @@ with_cuda = False
 
 if torch.cuda.is_available():
     print('Including CUDA code.')
-    sources += ['src/roi_pooling_cuda.cpp']
+    sources += ['src/roi_pooling_cuda.c']
     headers += ['src/roi_pooling_cuda.h']
     defines += [('WITH_CUDA', None)]
     with_cuda = True
 
 this_file = os.path.dirname(os.path.realpath(__file__))
 print(this_file)
-extra_objects = ['src/cuda/roi_pooling_kernel.obj']
+extra_objects = ['src/cuda/roi_pooling_kernel.cu.o']
 extra_objects = [os.path.join(this_file, fname) for fname in extra_objects]
 
 ffi = create_extension(
@@ -27,10 +27,7 @@ ffi = create_extension(
     define_macros=defines,
     relative_to=__file__,
     with_cuda=with_cuda,
-    extra_objects=extra_objects,
-    extra_compile_args=["/MT","-std=c99", "/NODEFAULTLIB:library"],
-    libraries=['ATen', '_C','cudart'] 
-    # libraries=['cudart'] 
+    extra_objects=extra_objects
 )
 
 if __name__ == '__main__':

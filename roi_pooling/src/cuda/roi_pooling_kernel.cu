@@ -1,9 +1,11 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
 #include "roi_pooling_kernel.h"
-// #include <THC/THC.h>
-// #include <ATen/ATen.h>
 
 #define CUDA_1D_KERNEL_LOOP(i, n)                            \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; \
@@ -176,7 +178,6 @@ __global__ void ROIPoolBackward(const int nthreads, const float* top_diff,
   }
 }
 
-
 int ROIPoolBackwardLaucher(const float* top_diff, const float spatial_scale, const int batch_size, const int num_rois,
     const int height, const int width, const int channels, const int pooled_height,
     const int pooled_width, const float* bottom_rois,
@@ -199,5 +200,10 @@ int ROIPoolBackwardLaucher(const float* top_diff, const float spatial_scale, con
 
     return 1;
 }
+
+
+#ifdef __cplusplus
+}
+#endif
 
 

@@ -1,13 +1,9 @@
-#include <ATen/ATen.h>
 #include <THC/THC.h>
 #include <math.h>
 #include "cuda/roi_pooling_kernel.h"
-THCState *state = at::globalContext().thc_state;
 
+extern THCState *state;
 
-#ifdef __cplusplus
-extern "C"
-#endif __cplusplus
 int roi_pooling_forward_cuda(int pooled_height, int pooled_width, float spatial_scale,
                         THCudaTensor * features, THCudaTensor * rois, THCudaTensor * output, THCudaIntTensor * argmax)
 {
@@ -50,9 +46,6 @@ int roi_pooling_forward_cuda(int pooled_height, int pooled_width, float spatial_
     return 1;
 }
 
-#ifdef __cplusplus
-extern "C"
-#endif 
 int roi_pooling_backward_cuda(int pooled_height, int pooled_width, float spatial_scale,
                         THCudaTensor * top_grad, THCudaTensor * rois, THCudaTensor * bottom_grad, THCudaIntTensor * argmax)
 {

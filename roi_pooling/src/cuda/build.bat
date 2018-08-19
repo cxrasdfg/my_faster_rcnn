@@ -1,1 +1,0 @@
-nvcc -c roi_pooling_kernel.cu -O3 -IC:\ProgramData\Anaconda3\Lib\site-packages\torch\lib\include\ -IC:\ProgramData\Anaconda3\Lib\site-packages\torch\lib\include\TH -IC:\ProgramData\Anaconda3\Lib\site-packages\torch\lib\include\ATen
