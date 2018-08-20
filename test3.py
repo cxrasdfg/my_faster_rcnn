@@ -29,7 +29,6 @@ np.random.seed(1234567)
 torch.manual_seed(1234567)
 torch.cuda.manual_seed(1234567)
 
-
 normalize =transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
     std=[0.229, 0.224, 0.225])
@@ -250,7 +249,7 @@ class DetectorBlock(torch.nn.Module):
                 param.data.normal_(0,0.01)
         self.classfier=torch.nn.Sequential(OrderedDict([
             ('fc5_1',Linear(self.fc_3_4[-2].out_features,len(data_set.classes)+1)),# plus 1 for the background
-            ('relu5_1',ReLU(inplace=True)),
+            # ('relu5_1',ReLU(inplace=True)),
             ('softmax5_1',Softmax())
         ]))
         self.box_reg=torch.nn.Sequential(OrderedDict([
@@ -279,18 +278,18 @@ class MyNet(torch.nn.Module):
         #     raise ValueError('input size must be equal...')
         # if input_size[0] % 32 != 0 and input_size[1] % 32 !=0:
         #     raise ValueError('input size must be modded by 32')
-        # self.stride=32
-        anchor_aspect,anchor_scale=np.meshgrid([0.5,1,2],[128,256,512]) # (128,256,512) (1:2,1:1,2:1)
-        boxes_w=anchor_scale*np.sqrt(anchor_aspect) # [3,3]
-        boxes_h=anchor_scale/np.sqrt(anchor_aspect) # [3,3]
-        boxes_wh=np.concatenate([boxes_w.reshape(-1,1),boxes_h.reshape(-1,1)],axis=1) # [9,2]
 
-        self.anchors_wh=boxes_wh # [anchor_num,2], width and height for the anchors 
-        self.anchor_num=len(boxes_wh)
+        # self.stride=32
+        # anchor_aspect,anchor_scale=np.meshgrid([0.5,1,2],[128,256,512]) # (128,256,512) (1:2,1:1,2:1)
+        # boxes_w=anchor_scale*np.sqrt(anchor_aspect) # [3,3]
+        # boxes_h=anchor_scale/np.sqrt(anchor_aspect) # [3,3]
+        # boxes_wh=np.concatenate([boxes_w.reshape(-1,1),boxes_h.reshape(-1,1)],axis=1) # [9,2]
+        # self.anchors_wh=boxes_wh # [anchor_num,2], width and height for the anchors 
+        # self.anchor_num=len(boxes_wh)
 
         self.roi_size=[7,7]
 
-        net='resnet18'
+        net='resnet101'
 
         # self.extractor=Backbone(pretrained=True).features 
         if net=='resnet18':
@@ -312,8 +311,10 @@ class MyNet(torch.nn.Module):
         self.roi_pooling=ROIPooling(self.roi_size,self.stride)
         # self.roi_pooling=RoIPool(self.roi_size[0],self.roi_size[1],1.0/self.stride)
         
-
+        self.loc_anchors=get_locally_anchors()
+        self.anchor_num=len(self.loc_anchors)
         self.detector=DetectorBlock(self.roi_size[0]*self.roi_size[1]*rpn_input_features,
+
         data_set=data_set,front_fc=classifier if net=='vgg16' else None)
         self.rpn=torch.nn.Sequential(OrderedDict([
             ('rpn_conv1',Conv2d(rpn_input_features,512,(3,3),1,padding=1)),
@@ -324,8 +325,7 @@ class MyNet(torch.nn.Module):
         
         self.rpn_loss=RPNMultiLoss()
         self.fast_rcnn_loss=FastRCnnLoss()
-        self.loc_anchors=get_locally_anchors()
-        self.anchor_num=len(self.loc_anchors)
+       
 
         for name,param in self.rpn.named_parameters():
             if 'conv' in name:
@@ -341,16 +341,19 @@ class MyNet(torch.nn.Module):
         params=[]
         for key, value in dict(self.named_parameters()).items():
             if value.requires_grad:
-                if 'detector.fc' in key:
-                    if 'bias' in key:
-                        params += [{'params': [value], 'lr': lr * 20, 'weight_decay': 0}]
-                    else:
-                        params += [{'params': [value], 'lr': lr *10, 'weight_decay': 0.9}]
+                # if 'detector.fc' in key:
+                #     if 'bias' in key:
+                #         params += [{'params': [value], 'lr': lr * 20, 'weight_decay': 0}]
+                #     else:
+                #         params += [{'params': [value], 'lr': lr *10, 'weight_decay': 0.9}]
+                # else:
+                #     if 'bias' in key:
+                #         params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
+                #     else:
+                if 'bias' in key:
+                    params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
                 else:
-                    if 'bias' in key:
-                        params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
-                    else:
-                        params += [{'params': [value], 'lr': lr, 'weight_decay': 0.9}]
+                    params += [{'params': [value], 'lr': lr, 'weight_decay': 0.0005}]
         if use_adam:
             print("Using Adam optimizer")
             self.optimizer = torch.optim.Adam(params)
@@ -359,6 +362,36 @@ class MyNet(torch.nn.Module):
             self.optimizer = torch.optim.SGD(params, momentum=0.9)
         return self.optimizer
 
+    def only_train_cls(self,imgs,box,label):
+        label=label[0]
+        box=box[0]
+        x=self.extractor(imgs)
+        _col=torch.zeros(len(box),1).type_as(box)
+        rois=torch.cat([_col,box],dim=1)
+        x=self.roi_pooling(x,rois)
+        pos_cls,out_reg_box=self.detector(x)  
+
+        label= label+1
+        label=label.long()
+        loss=-pos_cls[torch.arange(len(pos_cls)).long(),(label).long()].log().sum()
+        # loss=torch.nn.CrossEntropyLoss()(pos_cls,label)
+
+        # pos_cls=pos_cls.softmax(dim=1)
+        ttt=pos_cls[torch.arange(len(pos_cls)).long(),(label).long()]
+        _,acc=pos_cls[:,1:].max(dim=1)
+        acc=acc+1
+        acc=(acc==label).sum().float()/len(acc) 
+        
+        tqdm.write("Only train for classification: max prob=%.5f, acc=%.5f" \
+            %(ttt.max(),acc) ,end=",\t ")
+
+        loss.backward()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        return loss.item()
+
+        
     def train_once(self,imgs,box,label,scale):
         r"""Train the rpn and fast r-cnn together
         Args:
@@ -368,6 +401,9 @@ class MyNet(torch.nn.Module):
         """
         assert imgs.shape[0] == 1
         assert box.shape[0]==1
+
+        # return self.only_train_cls(imgs,box,label)
+
         t1=time.time()
         img_size,img_feat,anchors,out_rois,\
             out_cls,sampled_rois \
@@ -447,9 +483,9 @@ class MyNet(torch.nn.Module):
         pos_gt_loc=gt_loc[pos_mask]
         
         ###############
-        # chaneg the incices, select 16 positive and 48 negative
-        pos_rand_idx=torch.randperm(len(pos_roi))[:16]
-        neg_rand_idx=torch.randperm(len(neg_roi))[:48]
+        # chaneg the incices, select 32 positive and 96 negative
+        pos_rand_idx=torch.randperm(len(pos_roi))[:32]
+        neg_rand_idx=torch.randperm(len(neg_roi))[:96]
 
         # prepare the box 
         pos_rois=pos_roi[pos_rand_idx]
@@ -567,7 +603,7 @@ class MyNet(torch.nn.Module):
         return gt_loc,assign
 
     def roi_target(self,rois,gt_box,label,pos_thresh=.5,
-                    neg_thresh_lo=.1,neg_thresh_hi=.3):
+                    neg_thresh_lo=.0,neg_thresh_hi=.5):
         r"""Assign roi to gt_box
         Args:
             rois (tensor): [a,4]
@@ -1277,8 +1313,13 @@ class FastRCnnLoss(torch.nn.Module):
         cls_loss=-pos_cls[torch.arange(len(pos_cls)).long(),(pos_label).long()].log().sum()\
             -(neg_cls[:,0].log().sum() if len(neg_cls)!=0 else 0)
         
-        tqdm.write("max positive prob in fast r-cnn: %.5f" \
-            %(pos_cls[torch.arange(len(pos_cls)).long(),(pos_label).long()].max()) ,end=",\t ")
+        ttt=pos_cls[torch.arange(len(pos_cls)).long(),(pos_label).long()].max()
+        _,acc=pos_cls[:,:].max(dim=1)
+        acc=acc
+        acc=acc.long()
+        acc=(acc==pos_label).sum().float()/len(pos_label) 
+        tqdm.write("fast r-cnn: max prob=%.5f, acc=%.5f" \
+            %(ttt,acc),end=",\t ")
 
         # smooth l1...
         reg_loss=out_box-gt_box
@@ -1345,6 +1386,7 @@ def main():
         for i,(imgs,boxes,labels,scale) in tqdm(enumerate(data_loader)):
             if is_cuda:
                 imgs=imgs.cuda()
+                labels=labels.cuda()
                 boxes=boxes.cuda()
                 scale=scale.cuda().float()
             loss=net.train_once(imgs,boxes,labels,scale)
