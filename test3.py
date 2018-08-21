@@ -289,7 +289,7 @@ class MyNet(torch.nn.Module):
 
         self.roi_size=[7,7]
 
-        net='resnet101'
+        net='resnet18'
 
         # self.extractor=Backbone(pretrained=True).features 
         if net=='resnet18':
@@ -409,7 +409,7 @@ class MyNet(torch.nn.Module):
             out_cls,sampled_rois \
             = self.first_stage(imgs,12000,2000,scale)
         
-        tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
+        # tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
         if SHOW_RPN_RES:
             draw_box(CUR_IMG,sampled_rois[:,1:][:6],'roi')
             show_img(CUR_IMG,1)
@@ -485,7 +485,7 @@ class MyNet(torch.nn.Module):
         ###############
         # chaneg the incices, select 32 positive and 96 negative
         pos_rand_idx=torch.randperm(len(pos_roi))[:32]
-        neg_rand_idx=torch.randperm(len(neg_roi))[:96]
+        neg_rand_idx=torch.randperm(len(neg_roi))[:128-len(pos_rand_idx)]
 
         # prepare the box 
         pos_rois=pos_roi[pos_rand_idx]
@@ -504,9 +504,9 @@ class MyNet(torch.nn.Module):
         # NOTE find the memory leak...
         x=self.roi_pooling(img_feat,torch.cat([pos_rois,neg_rois],dim=0) ) # [num_pos_roi+num_neg_roi,c,7,7]
         # print("Time of roi pooling:%.3f"%(time.time()-t1))
-        tqdm.write("max of roi pooling:%.5f, sum of roi pooling:%.5f"%(
-            x.max(),x.sum()), end=",\t "
-            )
+        # tqdm.write("max of roi pooling:%.5f, sum of roi pooling:%.5f"%(
+        #     x.max(),x.sum()), end=",\t "
+        #     )
 
         if DEBUG:
             tick_show(CUR_IMG,pos_rois[:,1:],'roi')
@@ -952,7 +952,7 @@ class MyNet(torch.nn.Module):
             box_cls,prob_cls=box_cls[:,:4],box_cls[:,4] # [m',4], [m']
             res_boxes=torch.cat([res_boxes,box_cls],dim=0)
             res_labels= torch.cat([res_labels,
-                torch.full([len(res_boxes)],cls).type_as(boxes)],
+                torch.full([len(box_cls)],cls).type_as(boxes)],
                 dim=0
                 )
             res_prob=torch.cat([res_prob,prob_cls],
@@ -1278,6 +1278,13 @@ class MyNet(torch.nn.Module):
         return default_boxes
         raise NotImplementedError('you must implement the function `get_anchors`')
 
+def _smooth_l1_loss(x,gt,sigma):
+    sigma2 = sigma ** 2
+    diff = (x - gt)
+    abs_diff = diff.abs()
+    flag = (abs_diff < (1. / sigma2))
+    y=torch.where(flag, (sigma2 / 2.) * (diff ** 2), (abs_diff-.5/sigma2))
+    return y.sum()
     
 class RPNMultiLoss(torch.nn.Module):
     def __init__(self):
@@ -1291,11 +1298,9 @@ class RPNMultiLoss(torch.nn.Module):
         cls_loss=-pos_cls[:,0].log().sum()-neg_cls[:,1].log().sum()
 
         # smooth l1...
-        reg_loss=out_box-gt_box
-        reg_loss=reg_loss.abs()
-        reg_loss=torch.where(reg_loss<1,.5*reg_loss**2,reg_loss-.5).sum()
-
-        loss=cls_loss/n_cls+reg_loss*_lambda/n_reg
+        # loss=cls_loss/n_cls+reg_loss*_lambda/n_reg
+        reg_loss=_smooth_l1_loss(out_box,gt_box,3.)
+        loss=cls_loss/n_cls+reg_loss/n_cls
         return loss
         raise NotImplementedError()
 
@@ -1310,23 +1315,25 @@ class FastRCnnLoss(torch.nn.Module):
 
         # pos_label is already plus by one 
         assert pos_label.min() >0
-        cls_loss=-pos_cls[torch.arange(len(pos_cls)).long(),(pos_label).long()].log().sum()\
+        num_pos=len(pos_cls)
+        num_neg=len(neg_cls)
+        n_cls=num_pos+num_neg
+
+        cls_loss=-pos_cls[torch.arange(num_pos).long(),(pos_label).long()].log().sum()\
             -(neg_cls[:,0].log().sum() if len(neg_cls)!=0 else 0)
         
-        ttt=pos_cls[torch.arange(len(pos_cls)).long(),(pos_label).long()].max()
+        ttt=pos_cls[torch.arange(num_pos ).long(),(pos_label).long()].max()
         _,acc=pos_cls[:,:].max(dim=1)
         acc=acc
         acc=acc.long()
-        acc=(acc==pos_label).sum().float()/len(pos_label) 
+        acc=(acc==pos_label).sum().float()/num_pos
         tqdm.write("fast r-cnn: max prob=%.5f, acc=%.5f" \
             %(ttt,acc),end=",\t ")
 
         # smooth l1...
-        reg_loss=out_box-gt_box
-        reg_loss=reg_loss.abs()
-        reg_loss=torch.where(reg_loss<1,.5*reg_loss**2,reg_loss-.5).sum()
+        reg_loss=_smooth_l1_loss(out_box,gt_box,1.)
 
-        loss=cls_loss+_lambda*reg_loss
+        loss=cls_loss/n_cls+reg_loss/n_cls
         # loss=cls_loss
 
         return loss
@@ -1409,21 +1416,32 @@ def test_net():
         raise ValueError("no model existed...")
     net.eval()
     is_cuda=True
-    img_src=cv2.imread("/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007/JPEGImages/000012.jpg")
-    h,w=img_src.shape
+    # img_src=cv2.imread("/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007/JPEGImages/000012.jpg")
+    # img_src=cv2.imread('./example.jpg')
+    img_src=cv2.imread('./dog.jpg')
+    h,w,_=img_src.shape
     scale1=1.0*600/min(h,w)
     scale2=1.0*1000/max(h,w)
     scale=min(scale1,scale2)
     scale=(scale,scale)
     img_src=cv2.resize(img_src,(int(w*scale[0]),int(h*scale[1]) ),interpolation=cv2.INTER_LINEAR)
     img=img_normalization(img_src)
-    img=torch.tensor([img])
+    img=img[None]
     if is_cuda:
         net.cuda()
         img=img.cuda()
     boxes,labels,probs=net(img,scale[0])[0]
-    boxes=boxes
-    draw_box(img_src,boxes)
+
+    classes=data_set.classes
+    prob_mask=probs>.5
+    boxes=boxes[prob_mask ] 
+    labels=labels[prob_mask ].long()
+    probs=probs[prob_mask]
+    draw_box(img_src,boxes,color='pred',
+        text_list=[ 
+            classes[_]+'[%.3f]'%(__)  for _,__ in zip(labels,probs)
+            ]
+        )
     show_img(img_src,-1)
     
 
@@ -1680,7 +1698,7 @@ def test_torch():
     print(b1,decode)
 
 if __name__ == '__main__':
-    main()
-    # test_net()
+    # main()
+    test_net()
     # test()
     # test_torch()
