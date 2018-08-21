@@ -14,7 +14,7 @@ from torchvision.models import vgg16,densenet121 as Backbone
 import torchvision
 from collections import OrderedDict
 import matplotlib.pyplot as plt
-from roi_pooling.roi_pool import RoIPool
+from roi_pool_cupy import RoIPooling2D
 from nms.pth_nms import pth_nms as ext_nms 
 from tqdm import tqdm
 import time
@@ -22,6 +22,7 @@ import gc
 import os
 from show_bbox import show_img,tick_show,draw_bbox as draw_box
 from torchvision import transforms
+
 DEBUG=False
 SHOW_RPN_RES=False
 CUR_IMG=None
@@ -308,7 +309,9 @@ class MyNet(torch.nn.Module):
         
 
         self.stride=16
-        self.roi_pooling=ROIPooling(self.roi_size,self.stride)
+        # self.roi_pooling=ROIPooling(self.roi_size,self.stride)
+        # try this roi pooling...
+        self.roi_pooling=RoIPooling2D(self.roi_size[0],self.roi_size[1],1.0/self.stride)
         # self.roi_pooling=RoIPool(self.roi_size[0],self.roi_size[1],1.0/self.stride)
         
         self.loc_anchors=get_locally_anchors()
@@ -1698,7 +1701,7 @@ def test_torch():
     print(b1,decode)
 
 if __name__ == '__main__':
-    # main()
-    test_net()
+    main()
+    # test_net()
     # test()
     # test_torch()
