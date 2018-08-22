@@ -5,12 +5,12 @@ from chainercv.datasets.voc import voc_utils
 from chainercv.transforms import resize_bbox
 from chainercv.transforms import random_flip
 from chainercv.transforms import flip_bbox
-from ..config import cfg
+from config import cfg
 from torch.utils.data import Dataset  
 from skimage.transform import resize
 import numpy as np
 
-__name_list=voc_utils.voc_bbox_label_names
+name_list=voc_utils.voc_bbox_label_names
 
 def caffe_normalize(img):
     img = img[[2, 1, 0], :, :]  # RGB-BGR
@@ -62,7 +62,7 @@ class Transform(object):
         return img, bbox, label, [scale,scale]
 
 class TrainDataset(Dataset):
-    classes=__name_list
+    classes=name_list
     def __init__(self):
         self.cfg=cfg
         self.sdb=VOCBboxDataset(cfg.voc_dir,'trainval')
@@ -70,12 +70,15 @@ class TrainDataset(Dataset):
     
     def __getitem__(self,idx):
         # NOTE: sdb returns the `yxyx`...
-        ori_img, bbox, label, difficult = self.sdb.get_example(idx)
+        ori_img= self.sdb._get_image(idx)
+        bbox,label,difficult=self.sdb._get_annotations(idx)
 
         img, bbox, label, scale = self.trans((ori_img, bbox, label))
         # TODO: check whose stride is negative to fix this instead copy all
         # some of the strides of a given numpy array are negative.
-        return img.copy(), bbox.copy(), label.copy(), scale
+        bbox=bbox.copy()
+        bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
+        return img.copy(), bbox, label.astype('long'), np.array(scale)
 
 
     def __len__(self):
@@ -83,15 +86,18 @@ class TrainDataset(Dataset):
 
 
 class TestDataset(Dataset):
-    classes=__name_list
+    classes=name_list
     def __init__(self, opt, split='test', use_difficult=True):
         self.cfg = cfg
         self.sdb = VOCBboxDataset(opt.voc_data_dir, split=split, use_difficult=use_difficult)
 
     def __getitem__(self, idx):
-        ori_img, bbox, label, difficult = self.sdb.get_example(idx)
+        ori_img= self.sdb._get_image(idx)
+        bbox,label,difficult=self.sdb._get_annotations(idx)
         img = preprocess(ori_img)
-        return img, ori_img.shape[1:], bbox, label, difficult
+        bbox=bbox.copy()
+        bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
+        return img, ori_img.shape[1:], bbox, label.astype('long'), difficult
 
     def __len__(self):
         return len(self.sdb)

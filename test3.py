@@ -23,6 +23,7 @@ import os
 from show_bbox import show_img,tick_show,draw_bbox as draw_box
 from torchvision import transforms
 from config import cfg
+from data import TrainDataset,TestDataset 
 
 DEBUG=False
 SHOW_RPN_RES=False
@@ -31,16 +32,13 @@ np.random.seed(1234567)
 torch.manual_seed(1234567)
 torch.cuda.manual_seed(1234567)
 
-normalize =transforms.Compose([
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    std=[0.229, 0.224, 0.225])
-])
 
 def decom_vgg16():
     # the 30th layer of features is relu of conv5_3
     model = vgg16(pretrained=False)
-    model.load_state_dict(torch.load(cfg.pretrained_model))
+    tt=torch.load(cfg.pretrained_model)
 
+    model.load_state_dict(tt)
     features = list(model.features)[:30]
     classifier = model.classifier
 
@@ -48,6 +46,7 @@ def decom_vgg16():
     del classifier[6]
     del classifier[5]
     del classifier[2]
+
     classifier = torch.nn.Sequential(*classifier)
 
     # freeze top4 conv
@@ -58,7 +57,7 @@ def decom_vgg16():
     return torch.nn.Sequential(*features), classifier
 
 class DetectorBlock(torch.nn.Module):
-    def __init__(self,input_dim=7*7*1024,data_set=VOCDataset,front_fc=None):
+    def __init__(self,input_dim=7*7*1024,classes=TrainDataset.classes,front_fc=None):
         super(DetectorBlock,self).__init__()
         if front_fc is not None:
             self.fc_3_4=front_fc
@@ -72,12 +71,12 @@ class DetectorBlock(torch.nn.Module):
             for param in self.fc_3_4.parameters():
                 param.data.normal_(0,0.01)
         self.classfier=torch.nn.Sequential(OrderedDict([
-            ('fc5_1',Linear(self.fc_3_4[-2].out_features,len(data_set.classes)+1)),# plus 1 for the background
+            ('fc5_1',Linear(self.fc_3_4[-2].out_features,len(classes)+1)),# plus 1 for the background
             # ('relu5_1',ReLU(inplace=True)),
             ('softmax5_1',Softmax())
         ]))
         self.box_reg=torch.nn.Sequential(OrderedDict([
-            ('sfc5_2',Linear(self.fc_3_4[-2].out_features,4*len(data_set.classes))) # class-wise
+            ('sfc5_2',Linear(self.fc_3_4[-2].out_features,4*len(classes))) # class-wise
         ]))
 
         for name,param in self.classfier.named_parameters():
@@ -96,7 +95,7 @@ class DetectorBlock(torch.nn.Module):
         return x1,x2
 
 class MyNet(torch.nn.Module):
-    def __init__(self,data_set=VOCDataset):
+    def __init__(self,classes):
         super(MyNet,self).__init__()
         self.roi_size=[7,7]
 
@@ -128,7 +127,7 @@ class MyNet(torch.nn.Module):
         self.anchor_num=len(self.loc_anchors)
         self.detector=DetectorBlock(self.roi_size[0]*self.roi_size[1]*rpn_input_features,
 
-        data_set=data_set,front_fc=classifier if net=='vgg16' else None)
+        classes=classes,front_fc=classifier if net=='vgg16' else None)
         self.rpn=torch.nn.Sequential(OrderedDict([
             ('rpn_conv1',Conv2d(rpn_input_features,512,(3,3),1,padding=1)),
             # ('rpn_bn_1',BatchNorm2d(512)),
@@ -797,7 +796,7 @@ def main():
     print("my name is van")
     # let the random counld be the same
     
-    data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
+    data_set=TrainDataset()
     data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
    
     # data_loader2=DataLoader(VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=True),batch_size=1,shuffle=True,drop_last=False)
@@ -1152,7 +1151,7 @@ def test_torch():
     print(b1,decode)
 
 if __name__ == '__main__':
-    # main()
-    test_net()
+    main()
+    # test_net()
     # test()
     # test_torch()
