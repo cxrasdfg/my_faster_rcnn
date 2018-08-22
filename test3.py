@@ -956,9 +956,11 @@ class MyNet(torch.nn.Module):
         res_labels=res_boxes.clone()
         res_prob=res_boxes.clone()
         for cls in range(cls_num):
+            if cls == 11:
+                print(cls)
             box_cls=boxes[:,cls,:] # [M,4]
             prob_cls=prob[:,cls] # [M]
-            box_cls=self.nms(torch.cat([box_cls,prob_cls[:,None]],dim=1)) # [m',5]
+            box_cls=self.nms(torch.cat([box_cls,prob_cls[:,None]],dim=1),.5) # [m',5]
             box_cls,prob_cls=box_cls[:,:4],box_cls[:,4] # [m',4], [m']
             res_boxes=torch.cat([res_boxes,box_cls],dim=0)
             res_labels= torch.cat([res_labels,
@@ -1377,7 +1379,7 @@ def main():
     
     epoches=int(1e6)
     # rpn_loss=RPNMultiLoss()
-    params=[]
+    # params=[]
     # for param in net.parameters():
         # if param.requires_grad:
             # params.append(param)
@@ -1449,7 +1451,7 @@ def test_net():
     boxes,labels,probs=net(img,torch.tensor([w,h]).type_as(img))[0]
 
     classes=data_set.classes
-    prob_mask=probs>.98
+    prob_mask=probs>.5
     boxes=boxes[prob_mask ] 
     labels=labels[prob_mask ].long()
     probs=probs[prob_mask]
