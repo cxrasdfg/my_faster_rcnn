@@ -35,10 +35,12 @@ torch.cuda.manual_seed(1234567)
 
 def decom_vgg16():
     # the 30th layer of features is relu of conv5_3
-    model = vgg16(pretrained=False)
-    tt=torch.load(cfg.pretrained_model)
-
-    model.load_state_dict(tt)
+    if cfg.use_caffe:
+        model = vgg16(pretrained=False)
+        tt=torch.load(cfg.pretrained_model)
+        model.load_state_dict(tt)
+    else:
+        model=vgg16(True)
     features = list(model.features)[:30]
     classifier = model.classifier
 
@@ -137,7 +139,10 @@ class MyNet(torch.nn.Module):
         
         self.rpn_loss=RPNMultiLoss()
         self.fast_rcnn_loss=FastRCnnLoss()
-       
+        
+        # mean and std for parameterized boxes
+        self.mean=torch.tensor(cfg.loc_mean)
+        self.std=torch.tensor(cfg.loc_std)
 
         for name,param in self.rpn.named_parameters():
             if 'conv' in name:
@@ -340,10 +345,12 @@ class MyNet(torch.nn.Module):
 
         out_pos_cls=out_cls[:num_pos_roi]
         out_neg_cls=out_cls[num_pos_roi:]
-        loss+=self.fast_rcnn_loss(out_pos_cls,
+        rcnn_loss=self.fast_rcnn_loss(out_pos_cls,
             pos_rois_corresbonding_gt_label,
             out_neg_cls,out_reg_box,target_box)
 
+        loss+=rcnn_loss
+        tqdm.write("fast r-cnn loss:%.5f" %(rcnn_loss.item()) ,end=',\t ')
         ##############
         
         # gradient descent
@@ -449,6 +456,16 @@ class MyNet(torch.nn.Module):
 
         # plus one since 0 denotes the neg, we must begin from the 1
         assign[pos_mask]=label[idx][pos_mask].long()+1 
+
+        # normalize?
+        mean=self.mean # [4]
+        std=self.std # [4]
+
+        mean=mean[None].expand_as(gt_loc).type_as(gt_loc)
+        std=std[None].expand_as(gt_loc).type_as(gt_loc)
+
+        gt_loc-=mean
+        gt_loc=gt_loc/std
 
         return rois,gt_loc,assign
 
@@ -580,6 +597,15 @@ class MyNet(torch.nn.Module):
             i_rois=i_rois[:,1:] # [M,4]
 
             i_param_boxes=i_param_boxes.view(len(i_param_boxes),-1,4) # [M,cls_num,4] 
+
+            mean=self.mean # [4]
+            std=self.std # [4]
+
+            mean=mean[None].expand_as(i_param_boxes).type_as(i_param_boxes)
+            std=std[None].expand_as(i_param_boxes).type_as(i_param_boxes)
+
+            i_param_boxes=(i_param_boxes*std+mean)
+
             i_rois=i_rois[:,None].expand_as(i_param_boxes) # [M,cls_num,4]
             r_boxes= decode_box(i_param_boxes,i_rois) # [M,cls_num,4]
             _,cls_num,_=r_boxes.shape
@@ -754,6 +780,8 @@ class RPNMultiLoss(torch.nn.Module):
         # loss=cls_loss/n_cls+reg_loss*_lambda/n_reg
         reg_loss=_smooth_l1_loss(out_box,gt_box,3.)
         loss=cls_loss/n_cls+reg_loss/n_cls
+
+        tqdm.write("rpn loss=%.5f: reg=%.5f, cls=%.5f" %(loss.item(),reg_loss.item(),cls_loss.item()),end=",\t ")
         return loss
         raise NotImplementedError()
 

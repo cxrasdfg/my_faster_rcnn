@@ -1,5 +1,7 @@
 # coding=UTF-8
 
+import torch
+import torchvision
 from chainercv.datasets.voc.voc_bbox_dataset import VOCBboxDataset
 from chainercv.datasets.voc import voc_utils
 from chainercv.transforms import resize_bbox
@@ -11,6 +13,14 @@ from skimage.transform import resize
 import numpy as np
 
 name_list=voc_utils.voc_bbox_label_names
+
+def torch_normalize(img):
+    img=img/255.0
+    img=torch.tensor(img).float()
+    img=torchvision.transforms.Normalize(mean=[0.485,0.456,0.406],
+        std=[0.229,0.224,0.224])(img)
+
+    return img.numpy()
 
 def caffe_normalize(img):
     img = img[[2, 1, 0], :, :]  # RGB-BGR
@@ -37,7 +47,10 @@ def preprocess(img,min_size=cfg.img_shorter_len,
     img=img/255.0
     img=resize(img,(c,h*scale[1],w*scale[0]),mode='reflect')
 
-    img=caffe_normalize(img)
+    if cfg.use_caffe:
+        img=caffe_normalize(img)
+    else:
+        img=torch_normalize(img)
     return img
 
 class Transform(object):
@@ -78,7 +91,7 @@ class TrainDataset(Dataset):
         # some of the strides of a given numpy array are negative.
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
-        return img.copy(), bbox, label.astype('long'), np.array(scale)
+        return img.copy(), bbox.copy(), label.astype('long'), np.array(scale)
 
 
     def __len__(self):
@@ -97,7 +110,7 @@ class TestDataset(Dataset):
         img = preprocess(ori_img)
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
-        return img, ori_img.shape[1:], bbox, label.astype('long'), difficult
+        return img, ori_img.shape[1:][::-1], bbox, label.astype('long'), difficult
 
     def __len__(self):
         return len(self.sdb)
