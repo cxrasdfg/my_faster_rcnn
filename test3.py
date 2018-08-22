@@ -183,7 +183,7 @@ class VOCDataset(Dataset):
         img=img_normalization(img)
         
         assert self._easy_mode or scale[0]==scale[1] 
-        return img,boxes[:,1:],(boxes[:,0]).astype('int'),scale[0]
+        return img,boxes[:,1:],(boxes[:,0]).astype('int'),np.array(scale)
 
         raise NotImplementedError('__getitem__() not completed...')
 
@@ -799,12 +799,14 @@ class MyNet(torch.nn.Module):
         return loss
 
 
-    def first_stage(self,x,num_prop_before,num_prop_after,scale=1.0,min_size=16):
+    def first_stage(self,x,num_prop_before,num_prop_after,scale,min_size=16):
         r"""The first part of the network, including the feature extraction,
         and rpn forwarding
         Args:
             x (tensor): [b,3,H,W], batch of images
-            num_prop (int): remained rois for each image
+            num_prop_before (int): remained rois for each image before sorting
+            num_prop_after (int): remainted rois for each image after sorting
+            scale (tensor[float]): [b,2] stores the scale for width and height...  
             min_size(int): threshold for discarding the boxes...
         Return:
             img_size (shape): image width and height
@@ -850,25 +852,27 @@ class MyNet(torch.nn.Module):
         rois[:,:,[1,3]]=rois[:,:,[1,3]].clone().clamp(min=.0,max=img_size[1]-1)
         
         # remove the rois whose size < threshold...
-        h=rois[:,:,2]-rois[:,:,0]
-        w=rois[:,:,3]-rois[:,:,1]
-        min_size=scale*min_size
-        scale_mask=(h>min_size)*(w>min_size)
-        rois_masked=rois[scale_mask]
-        out_cls_masked=out_cls[scale_mask]
-        if len(list(rois_masked.shape))==2:
-            rois_masked=rois_masked [None]
-            out_cls_masked=out_cls_masked[None]
+        h=rois[:,:,2]-rois[:,:,0] # [b,N]
+        w=rois[:,:,3]-rois[:,:,1] # [b,N]
+        min_size=scale*min_size # [b,2]
+        
+        # if len(list(rois_masked.shape))==2:
+        #     rois_masked=rois_masked [None]
+        #     out_cls_masked=out_cls_masked[None]
 
         # nms for each image
         rois_with_id=torch.empty(0).type_as(rois)
         
         t1=time.time()
         for i in range(b):
+            scale_mask=(h[i]>min_size[i,1])*(w[i]>min_size[i,0]) # [N] 
+            rois_masked=rois[i][scale_mask] # [N',4]
+            out_cls_masked=out_cls[i][scale_mask] # [N',2]
+
             # sort by the pos
-            rois_i=rois_masked[i]
-            tt=out_cls_masked[i][:,0:1] # idx 0 is the pos
-            _,idx=tt[:,0].sort(descending=True)    
+            rois_i=rois_masked
+            tt=out_cls_masked[:,0] # [N',1] idx 0 is the pos
+            _,idx=tt.sort(descending=True)    
             idx=idx[:num_prop_before]
             tt=_[:num_prop_before][:,None]
             rois_i=rois_i[idx]
@@ -895,27 +899,29 @@ class MyNet(torch.nn.Module):
 
         return img_size,img_features,anchors,out_rois,out_cls,sampled_rois  
 
-    def convert_fast_rcnn(self,classes,boxes,rois):
+    def convert_fast_rcnn(self,classes,boxes,rois,ratios):
         r"""Convert the output of the fast r-cnn to the real box with nms
         Args:
             classes (tensor): [N,obj_cls_num+1]
             boxes (tensor): [N,4*cls_num], parameters of bounding box regression 
             rois (tensor): [N,1+4], the coordinate obeys format `xyxy`
+            ratios (tensor[float]): [b,2], stores the scale ratio to the original image
         Return:
            res (list[object]): [img_num] 
         """
         res=[]
         for i in range(len(rois)):
             # for the i=th image
-            
             # find the i-th im
             mask=(rois[:,0]==i)
+            
             i_rois=rois[mask] # [M,1+4]
             i_param_boxes=boxes[mask] # [M,4*cls_num]
             i_param_cls=classes[mask] # [M,1+obj_cls_num]
             if len(i_rois)==0:
                 # no other images
                 break 
+            ratio=ratios[i]
             # the image_id is useless, so remove it
             i_rois=i_rois[:,1:] # [M,4]
 
@@ -926,6 +932,7 @@ class MyNet(torch.nn.Module):
             
             # remove the neg_cls_score and apply nms
             res_box,res_label,res_prob=self._suppres(r_boxes,i_param_cls[:,1:],cls_num)
+            res_box*=ratio
             res.append((res_box,res_label,res_prob))
 
         return res
@@ -964,17 +971,23 @@ class MyNet(torch.nn.Module):
 
         return res_boxes,res_labels,res_prob
 
-    def forward(self,x,scale=1.0):
+    def forward(self,x,src_size):
+        current_size=x.shape[2:][::-1]
+        current_size=torch.tensor(current_size)[None].expand(x.shape[0],-1) # [b,2]
+        current_size=current_size.type_as(x).float()
+        ratios=src_size/current_size.float() # [b,2]
+        ratios=ratios[:,None].expand(-1,2,-1).contiguous().view(-1,4) # [b,4]
+
         img_size,img_features,\
             anchors,out_rois,\
-            out_cls,sampled_rois=self.first_stage(x,6000,300,scale=scale)        
+            out_cls,sampled_rois=self.first_stage(x,6000,300,scale=1./ratios)        
 
         # roi pooling...
         x=self.roi_pooling(img_features,sampled_rois)
         classes,boxes=self.detector(x)
        
         # convert and nms
-        res=self.convert_fast_rcnn(classes,boxes,sampled_rois)
+        res=self.convert_fast_rcnn(classes,boxes,sampled_rois,ratios)
 
         return res
 
@@ -1427,16 +1440,16 @@ def test_net():
     scale2=1.0*1000/max(h,w)
     scale=min(scale1,scale2)
     scale=(scale,scale)
-    img_src=cv2.resize(img_src,(int(w*scale[0]),int(h*scale[1]) ),interpolation=cv2.INTER_LINEAR)
-    img=img_normalization(img_src)
+    img=cv2.resize(img_src,(int(w*scale[0]),int(h*scale[1]) ),interpolation=cv2.INTER_LINEAR)
+    img=img_normalization(img)
     img=img[None]
     if is_cuda:
         net.cuda()
         img=img.cuda()
-    boxes,labels,probs=net(img,scale[0])[0]
+    boxes,labels,probs=net(img,torch.tensor([w,h]).type_as(img))[0]
 
     classes=data_set.classes
-    prob_mask=probs>.5
+    prob_mask=probs>.98
     boxes=boxes[prob_mask ] 
     labels=labels[prob_mask ].long()
     probs=probs[prob_mask]
@@ -1701,7 +1714,7 @@ def test_torch():
     print(b1,decode)
 
 if __name__ == '__main__':
-    main()
-    # test_net()
+    # main()
+    test_net()
     # test()
     # test_torch()
