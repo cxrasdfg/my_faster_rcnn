@@ -37,7 +37,7 @@ def decom_vgg16():
     # the 30th layer of features is relu of conv5_3
     if cfg.use_caffe:
         model = vgg16(pretrained=False)
-        tt=torch.load(cfg.pretrained_model)
+        tt=torch.load(cfg.caffe_model)
         model.load_state_dict(tt)
     else:
         model=vgg16(True)
@@ -57,6 +57,128 @@ def decom_vgg16():
             p.requires_grad = False
 
     return torch.nn.Sequential(*features), classifier
+
+class ResNet(torchvision.models.ResNet):
+    def __init__(self,block, layers):
+        super(ResNet,self).__init__(block,layers)
+    
+    def forward(self,x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        # x = self.layer4(x)
+        return x
+
+
+def resnet18(pretrained=False, **kwargs):
+    """Constructs a ResNet-18 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(torchvision.models.resnet.BasicBlock, [2, 2, 2, 2], **kwargs)
+    if pretrained:
+        model.load_state_dict(torchvision.models.resnet.model_zoo.load_url(torchvision.models.resnet.model_urls['resnet18']))
+    return model
+
+
+normalize =transforms.Compose([
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225])
+])
+
+def img_normalization(img):
+    r"""Normalize the image
+    Args:
+        img (np.ndarray): [h,w,3], obeys the `bgr` format, pixel value is in [0,255]
+    Return:
+        img (np.ndarray): [3,h,w], obeys the `rgb` format and is normalized to [0,1]
+    """
+    img=img[:,:,::-1] # convert bgr to rgb
+    img=img.astype('float32')
+    img=img/255.0  # normalization...
+    img=img.transpose(2,0,1)
+    img=torch.tensor(img).float()
+    img=normalize(img)
+    return img
+
+class VOCDataset(Dataset):  
+    classes = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]    
+
+    def __init__(self,voc_root,list_path,easy_mode=True):
+        super(VOCDataset,self).__init__()
+        self._root=voc_root
+        self._list_path=list_path
+        self._img_list=[]
+        self._gt=[]
+        self._shorter_len=600
+        self._max_len=1000 # constraint it or the gpu memory will boom... 
+        self._easy_mode=easy_mode
+        self._easy_h_w=224
+        # load the list
+        with open(self._root+'/'+self._list_path,encoding='utf-8') as list_file:
+            buffer=list_file.read()
+            buffer=buffer.split('\n')
+            for i in buffer:
+                temp=i.split(' ')
+                assert (len(temp)-1)% 5 ==0
+                if temp[0] == '':
+                    continue
+                self._img_list.append(temp[0])
+                del temp[0]
+                temp=np.array([int(_) if str.isdigit(_) else float(_)   for _ in temp],dtype='float32')
+                self._gt.append(temp.reshape([-1,5]))
+
+        assert len(self._gt) == len(self._img_list)            
+        # print(buffer)
+
+    def __getitem__(self,idx):
+        img_path=self._root+'/'+ self._img_list[idx] # abosolute path
+        boxes=self._gt[idx]  # [N,5].(cls_id,xmin,ymin,xmax,ymax), float type.
+        boxes=np.array(boxes) # copy to avoid the potential changes.. 
+        img=cv2.imread(img_path)
+        h,w,c=img.shape
+        # boxes[:,1:]=boxes[:,1:]/np.array([w,h,w,h]) # normalization   
+        # boxes[:,1:]/=np.array([w,h,w,h])
+
+        if not self._easy_mode:
+            scale1=1.0*self._shorter_len/min(h,w)
+            scale2=1.0*self._max_len/max(h,w)
+            scale=min(scale1,scale2)
+            # scale=1.0*self._shorter_len/min(h,w)
+            scale=(scale,scale)
+
+        else:
+            scale=(1.0*self._easy_h_w/w,1.0*self._easy_h_w/h)
+        img=cv2.resize(img,(int(w*scale[0]),int(h*scale[1]) ),interpolation=cv2.INTER_LINEAR)
+        boxes[:,1:]=resize_boxes(boxes[:,1:],scale)
+        
+        tqdm.write("Read image: id=%d" %(idx),end=",\t ")
+        if SHOW_RPN_RES or DEBUG :
+            global CUR_IMG
+            CUR_IMG=img.copy()
+            draw_box(CUR_IMG,boxes[:,1:],color='gt')
+
+        # TODO: add some data augmentation: flip, disort, paste and random crop 
+
+        # img=img[:,:,::-1] # convert bgr to rgb
+        # img=img.astype('float32')
+        # img-=127. # zero mean
+        # img=img/128.0  # normalization...
+        # img=img.transpose(2,0,1)
+        img=img_normalization(img)
+        
+        assert self._easy_mode or scale[0]==scale[1] 
+        return img,boxes[:,1:],(boxes[:,0]).astype('int'),np.array(scale)
+
+        raise NotImplementedError('__getitem__() not completed...')
+
+    def __len__(self):
+        return len(self._img_list)
 
 class DetectorBlock(torch.nn.Module):
     def __init__(self,input_dim=7*7*1024,classes=TrainDataset.classes,front_fc=None):
@@ -101,7 +223,7 @@ class MyNet(torch.nn.Module):
         super(MyNet,self).__init__()
         self.roi_size=[7,7]
 
-        net='vgg16'
+        net='resnet18'
 
         # self.extractor=Backbone(pretrained=True).features 
         if net=='resnet18':
@@ -824,7 +946,8 @@ def main():
     print("my name is van")
     # let the random counld be the same
     
-    data_set=TrainDataset()
+    # data_set=TrainDataset()
+    data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
     data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
    
     # data_loader2=DataLoader(VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=True),batch_size=1,shuffle=True,drop_last=False)

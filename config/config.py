@@ -7,7 +7,8 @@ class CFG():
     use_caffe=False
     
     loc_mean=[.0,.0,.0,.0]
-    loc_std=[.1,.1,.2,.2]
+    # loc_std=[.1,.1,.2,.2]
+    loc_std=[1,1,2,2]
 
     img_shorter_len=600
     img_longer_len=1000
