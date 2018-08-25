@@ -223,7 +223,7 @@ class MyNet(torch.nn.Module):
         super(MyNet,self).__init__()
         self.roi_size=[7,7]
 
-        net='resnet18'
+        net='vgg16'
 
         # self.extractor=Backbone(pretrained=True).features 
         if net=='resnet18':
@@ -946,8 +946,8 @@ def main():
     print("my name is van")
     # let the random counld be the same
     
-    # data_set=TrainDataset()
-    data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
+    data_set=TrainDataset()
+    #data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
     data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
    
     # data_loader2=DataLoader(VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=True),batch_size=1,shuffle=True,drop_last=False)
@@ -956,7 +956,7 @@ def main():
     last_time_model='./model.pkl'
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
-        net.load_state_dict(model.state_dict())
+        net.load_state_dict(model)
         print("Using the model from the last check point:%s"%(last_time_model),end=" ")
     net.train()
     is_cuda=True
@@ -1003,7 +1003,7 @@ def main():
             loss=net.train_once(imgs,boxes,labels,scale)
             tqdm.write('Epoch:%d, loss:%.5f'%(epoch,loss))
 
-        torch.save(net,'model.pkl')
+        torch.save(net.state_dict(),'model.pkl')
 
 def test_net():
     data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
@@ -1014,7 +1014,7 @@ def test_net():
     last_time_model='./model.pkl'
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
-        net.load_state_dict(model.state_dict())
+        net.load_state_dict(model)
         print("Using the model from the last check point:`%s`"%(last_time_model))
     else:
         raise ValueError("no model existed...")
