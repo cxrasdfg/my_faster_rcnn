@@ -3,7 +3,7 @@
 class CFG():
     voc_dir='/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007'
 
-    feat_dir='./features/vgg16'
+    feat_dir='./features/vgg16/'
     device_id=1
     use_cuda=True
 
