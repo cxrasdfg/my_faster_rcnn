@@ -22,7 +22,7 @@ def main():
         device_id=cfg.device_id
         net.cuda(device_id)
     data_set=ExtractorDataset()
-    data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
+    data_loader=DataLoader(data_set,batch_size=8,shuffle=False,drop_last=False)
 
     for i,(imgs,boxes,labels,scale,idx) in tqdm(enumerate(data_loader)):
         if cfg.use_cuda:
