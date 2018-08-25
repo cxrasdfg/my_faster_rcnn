@@ -5,8 +5,10 @@ class CFG():
 
     feat_dir='./features/vgg16/'
     use_offline_feat=True
-    device_id=1
+    device_id=0
     use_cuda=True
+
+    weights_dir='./weights/'
 
     caffe_model="vgg16_caffe_pretrain.pth"
     use_caffe=True

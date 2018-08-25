@@ -23,7 +23,7 @@ import os
 from show_bbox import show_img,tick_show,draw_bbox as draw_box
 from torchvision import transforms
 from config import cfg
-from data import TrainDataset,TestDataset 
+from data import TrainDataset,TestDataset,TrainSetExt 
 
 import re
 
@@ -333,12 +333,14 @@ class MyNet(torch.nn.Module):
         return loss.item()
 
         
-    def train_once(self,imgs,box,label,scale):
+    def train_once(self,imgs,box,label,scale,img_sizes):
         r"""Train the rpn and fast r-cnn together
         Args:
             imgs (tensor): [1,3,h,w]
             box (tensor): [1,N,4]
             label (tensor): [1,N]
+            scale (tensor): [1,2] scale for width and height 
+            img_sizes (tensor): [1,2] images sizes
         """
         assert imgs.shape[0] == 1
         assert box.shape[0]==1
@@ -348,7 +350,7 @@ class MyNet(torch.nn.Module):
         t1=time.time()
         img_size,img_feat,anchors,out_rois,\
             out_cls,sampled_rois \
-            = self.first_stage(imgs,12000,2000,scale)
+            = self.first_stage(imgs,img_sizes,12000,2000,scale)
         
         # tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
         if SHOW_RPN_RES:
@@ -541,7 +543,7 @@ class MyNet(torch.nn.Module):
         gt_loc=new_gt_loc
 
         if gt_box.is_cuda:
-            gt_loc=gt_loc.cuda()
+            gt_loc=gt_loc.cuda(gt_box.device.index)
 
         return gt_loc,assign
 
@@ -594,11 +596,12 @@ class MyNet(torch.nn.Module):
         return rois,gt_loc,assign
 
 
-    def first_stage(self,x,num_prop_before,num_prop_after,scale,min_size=16):
+    def first_stage(self,x,img_size,num_prop_before,num_prop_after,scale,min_size=16):
         r"""The first part of the network, including the feature extraction,
         and rpn forwarding
         Args:
             x (tensor): [b,3,H,W], batch of images
+            img_size (tensor): [b,2]  image size for each batch 
             num_prop_before (int): remained rois for each image before sorting
             num_prop_after (int): remainted rois for each image after sorting
             scale (tensor[float]): [b,2] stores the scale for width and height...  
@@ -612,9 +615,16 @@ class MyNet(torch.nn.Module):
             sampled_rois (tensor): [n',5], sampled_rois for fast-rcnn, fmt is 
         (img_id,left,top,right,bottom)self.fc_3_4[-2].out_features
         """
-        img_size=x.shape[2:][::-1]
+        # img_size=x.shape[2:][::-1]
+        # all the images should be the same size
+        assert (img_size[0][None].expand_as(img_size) != img_size).sum() == 0
+        img_size=img_size[0]
+
         t1=time.time()
-        img_features=self.extractor(x) # [b,c,h,w]
+        if not cfg.use_offline_feat:
+            img_features=self.extractor(x) # [b,c,h,w]
+        else:
+            img_features=x
         # print("Time of feature extraction:%.3f" %(time.time()-t1))
 
         t1=time.time()
@@ -786,7 +796,7 @@ class MyNet(torch.nn.Module):
 
         img_size,img_features,\
             anchors,out_rois,\
-            out_cls,sampled_rois=self.first_stage(x,6000,300,scale=1./ratios)        
+            out_cls,sampled_rois=self.first_stage(x,current_size,6000,300,scale=1./ratios)        
 
         # roi pooling...
         x=self.roi_pooling(img_features,sampled_rois)
@@ -948,7 +958,10 @@ def main():
     print("my name is van")
     # let the random counld be the same
     
-    data_set=TrainDataset()
+    if cfg.use_offline_feat:
+        data_set=TrainSetExt()
+    else:
+        data_set=TrainDataset()
     #data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
     data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
    
@@ -1000,13 +1013,14 @@ def main():
         #     loss=net.train_fast_rcnn(imgs,boxes,labels,fast_rcnn_loss,rpn_opt)
         #     print('fast r-cnn loss:%f' %(loss.data))
 
-        for i,(imgs,boxes,labels,scale) in tqdm(enumerate(data_loader)):
+        for i,(imgs,boxes,labels,scale,img_sizes) in tqdm(enumerate(data_loader)):
             if is_cuda:
                 imgs=imgs.cuda(did)
                 labels=labels.cuda(did)
                 boxes=boxes.cuda(did)
                 scale=scale.cuda(did).float()
-            loss=net.train_once(imgs,boxes,labels,scale)
+                img_sizes=img_sizes.cuda(did).float()
+            loss=net.train_once(imgs,boxes,labels,scale,img_sizes)
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             iteration+=1
@@ -1070,7 +1084,7 @@ def encode_box(real_boxes,anchor_boxes):
     """
     assert real_boxes.shape==anchor_boxes.shape,'`real_boxes.shape` must be the same sa the `anchor_boxes`'
     if real_boxes.is_cuda and not anchor_boxes.is_cuda:
-        anchor_boxes=anchor_boxes.cuda()
+        anchor_boxes=anchor_boxes.cuda(real_boxes.device.index)
     assert anchor_boxes.is_cuda == anchor_boxes.is_cuda
     
     # change the boxes to `ccwh`
@@ -1093,7 +1107,7 @@ def decode_box(param_boxes,anchor_boxes):
     """
     assert param_boxes.shape == anchor_boxes.shape 
     if param_boxes.is_cuda and not anchor_boxes.is_cuda:
-        anchor_boxes=anchor_boxes.cuda()
+        anchor_boxes=anchor_boxes.cuda(param_boxes.device.index)
     b,n,_=param_boxes.shape
     # change anchors to `ccwh`
     anchor_boxes=xyxy2ccwh(anchor_boxes.contiguous().view(-1,4),inplace=False).view(b,n,4)
@@ -1198,7 +1212,7 @@ def get_anchors(loc_anchors,h,w,stride=16,is_cuda=False):
     # reshape
     anchors=anchors.view(-1,4) # [n*h*w,4]
     if is_cuda:
-        anchors=anchors.cuda()
+        anchors=anchors.cuda(cfg.device_id)
 
     return anchors
     
@@ -1313,7 +1327,7 @@ def test_torch():
 
 def get_check_point():
     pat=re.compile("""weights_([\d]+)_([\d]+)""")
-    base_dir='./models/'
+    base_dir=cfg.weights_dir
     w_files=os.listdir(base_dir)
     if len(w_files)==0:
         return 0,0,None

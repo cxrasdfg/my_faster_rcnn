@@ -10,8 +10,8 @@ class ExtractorDataset(TrainDataset):
         super(ExtractorDataset,self).__init__()
     
     def __getitem__(self,idx):
-        img,box,label,scale=TrainDataset.__getitem__(self,idx)
-        return img,box,label,scale,idx
+        img,box,label,scale,cur_img_size=TrainDataset.__getitem__(self,idx)
+        return img,box,label,scale,idx,cur_img_size
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
     data_set=ExtractorDataset()
     data_loader=DataLoader(data_set,batch_size=1,shuffle=False,drop_last=False)
 
-    for i,(imgs,boxes,labels,scale,idx) in tqdm(enumerate(data_loader)):
+    for _,(imgs,boxes,labels,scale,idx,img_size) in tqdm(enumerate(data_loader)):
         if cfg.use_cuda:
             imgs=imgs.cuda(device_id)
         feat=net(imgs)
@@ -39,7 +39,8 @@ def main():
             content={'feat':feat[pos],
                 'box':boxes[pos],
                 'label':labels[pos],
-                'scale':scale[pos]}
+                'scale':scale[pos],
+                'img_size':img_size[pos]}
             torch.save(content,fname)
 
 

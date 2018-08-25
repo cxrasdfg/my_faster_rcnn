@@ -91,12 +91,25 @@ class TrainDataset(Dataset):
         # some of the strides of a given numpy array are negative.
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
-        return img.copy(), bbox.copy(), label.astype('long'), np.array(scale)
+        cur_img_size=img.shape[1:][::-1]
+        return img.copy(), bbox.copy(), label.astype('long'), np.array(scale),np.array(cur_img_size)
 
 
     def __len__(self):
         return len(self.sdb)
 
+
+class TrainSetExt(TrainDataset):
+    def __init__(self):
+        super(TrainSetExt,self).__init__()
+    
+    
+    def __getitem__(self,idx):
+        offline_data= torch.load(cfg.feat_dir+str(idx))
+
+        return offline_data['feat'],offline_data,['box'],\
+            offline_data['label'],offline_data['scale'],\
+            offline_data['img_size']
 
 class TestDataset(Dataset):
     classes=name_list
