@@ -974,7 +974,7 @@ def main():
     if w_path:
         model=torch.load(w_path)
         if cfg.use_offline_feat:
-            net.rpn.load_state_dict(model)
+            net.load_state_dict(model)
         else:
             net.load_state_dict(model)
         print("Using the model from the last check point:%s"%(w_path),end=" ")
@@ -1028,7 +1028,7 @@ def main():
 
             iteration+=1
         if cfg.use_offline_feat:
-            torch.save(net.rpn.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
+            torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
         else:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
         epoch+=1
@@ -1043,7 +1043,7 @@ def test_net():
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
         if cfg.use_offline_feat:
-            net.rpn.load_state_dict(model)
+            net.load_state_dict(model)
         else:
             net.load_state_dict(model)
         print("Using the model from the last check point:`%s`"%(last_time_model))
