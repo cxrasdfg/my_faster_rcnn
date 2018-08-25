@@ -25,6 +25,8 @@ from torchvision import transforms
 from config import cfg
 from data import TrainDataset,TestDataset 
 
+import re
+
 DEBUG=False
 SHOW_RPN_RES=False
 CUR_IMG=None
@@ -953,11 +955,14 @@ def main():
     # data_loader2=DataLoader(VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=True),batch_size=1,shuffle=True,drop_last=False)
 
     net=MyNet(data_set)
-    last_time_model='./model.pkl'
-    if os.path.exists(last_time_model):
-        model=torch.load(last_time_model)
+    # last_time_model='./model.pkl'
+    epoch,iteration,w_path=get_check_point()
+
+    if w_path:
+        model=torch.load(w_path)
         net.load_state_dict(model)
-        print("Using the model from the last check point:%s"%(last_time_model),end=" ")
+        print("Using the model from the last check point:%s"%(w_path),end=" ")
+
     net.train()
     is_cuda=True
     if is_cuda:
@@ -971,7 +976,7 @@ def main():
             # params.append(param)
     # rpn_opt=torch.optim.SGD(iter(params) ,lr=0.001,momentum=0.9,weight_decay=0.0005)
     # fast_rcnn_loss=FastRCnnLoss()
-    for epoch in range(epoches):
+    while epoch<epoches:
         
         # train the rpn
         print('******epoch %d*********' % (epoch))
@@ -1001,9 +1006,12 @@ def main():
                 boxes=boxes.cuda()
                 scale=scale.cuda().float()
             loss=net.train_once(imgs,boxes,labels,scale)
-            tqdm.write('Epoch:%d, loss:%.5f'%(epoch,loss))
+            tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
-        torch.save(net.state_dict(),'model.pkl')
+            iteration+=1
+
+        torch.save(net.state_dict(),'./models/weights_%d_%d'%(epoch,iteration) )
+        epoch+=1
 
 def test_net():
     data_set=VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=False)
@@ -1011,7 +1019,7 @@ def test_net():
    
 
     net=MyNet(data_set)
-    last_time_model='./model.pkl'
+    _,_,last_time_model=get_check_point()
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
         net.load_state_dict(model)
@@ -1301,7 +1309,23 @@ def test_torch():
     decode=decode_box(encoded[None],b2[None])[0]
     print(b1,decode)
 
+def get_check_point():
+    pat=re.compile("""weights_([\d]+)_([\d]+)""")
+    base_dir='./models/'
+    w_files=os.listdir(base_dir)
+    if len(w_files)==0:
+        return 0,0,None
+    w_files=sorted(w_files,key=lambda elm:int(pat.match(elm)[1]),reverse=True)
+
+    w=w_files[0]
+    res=pat.match(w)
+    epoch=int(res[1])
+    iteration=int(res[2])
+
+    return epoch,iteration,base_dir+w
+
 if __name__ == '__main__':
+    # ttt()
     main()
     # test_net()
     # test()
