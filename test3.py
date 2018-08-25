@@ -964,9 +964,10 @@ def main():
         print("Using the model from the last check point:%s"%(w_path),end=" ")
 
     net.train()
-    is_cuda=True
+    is_cuda=cfg.use_cuda
+    did=cfg.device_id
     if is_cuda:
-        net.cuda()
+        net.cuda(did)
     
     epoches=int(1e6)
     # rpn_loss=RPNMultiLoss()
@@ -1001,10 +1002,10 @@ def main():
 
         for i,(imgs,boxes,labels,scale) in tqdm(enumerate(data_loader)):
             if is_cuda:
-                imgs=imgs.cuda()
-                labels=labels.cuda()
-                boxes=boxes.cuda()
-                scale=scale.cuda().float()
+                imgs=imgs.cuda(did)
+                labels=labels.cuda(did)
+                boxes=boxes.cuda(did)
+                scale=scale.cuda(did).float()
             loss=net.train_once(imgs,boxes,labels,scale)
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
@@ -1027,7 +1028,8 @@ def test_net():
     else:
         raise ValueError("no model existed...")
     net.eval()
-    is_cuda=True
+    is_cuda=cfg.use_cuda
+    did=cfg.device_id
     # img_src=cv2.imread("/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007/JPEGImages/000012.jpg")
     # img_src=cv2.imread('./example.jpg')
     img_src=cv2.imread('./dog.jpg')
@@ -1040,8 +1042,8 @@ def test_net():
     img=img_normalization(img)
     img=img[None]
     if is_cuda:
-        net.cuda()
-        img=img.cuda()
+        net.cuda(did)
+        img=img.cuda(did)
     boxes,labels,probs=net(img,torch.tensor([w,h]).type_as(img))[0]
 
     classes=data_set.classes
