@@ -107,7 +107,7 @@ class TrainSetExt(TrainDataset):
     def __getitem__(self,idx):
         offline_data= torch.load(cfg.feat_dir+str(idx))
 
-        return offline_data['feat'],offline_data,['box'],\
+        return offline_data['feat'],offline_data['box'],\
             offline_data['label'],offline_data['scale'],\
             offline_data['img_size']
 

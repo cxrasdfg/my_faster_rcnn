@@ -973,7 +973,10 @@ def main():
 
     if w_path:
         model=torch.load(w_path)
-        net.load_state_dict(model)
+        if cfg.use_offline_feat:
+            net.rpn.load_state_dict(model)
+        else:
+            net.load_state_dict(model)
         print("Using the model from the last check point:%s"%(w_path),end=" ")
 
     net.train()
@@ -1024,8 +1027,10 @@ def main():
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             iteration+=1
-
-        torch.save(net.state_dict(),'./models/weights_%d_%d'%(epoch,iteration) )
+        if cfg.use_offline_feat:
+            torch.save(net.rpn.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
+        else:
+            torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
         epoch+=1
 
 def test_net():
@@ -1037,7 +1042,10 @@ def test_net():
     _,_,last_time_model=get_check_point()
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
-        net.load_state_dict(model)
+        if cfg.use_offline_feat:
+            net.rpn.load_state_dict(model)
+        else:
+            net.load_state_dict(model)
         print("Using the model from the last check point:`%s`"%(last_time_model))
     else:
         raise ValueError("no model existed...")

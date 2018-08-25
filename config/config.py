@@ -10,7 +10,7 @@ class CFG():
 
     weights_dir='./weights/'
 
-    caffe_model="vgg16_caffe_pretrain.pth"
+    caffe_model="./models/vgg16_caffe_pretrain.pth"
     use_caffe=True
     
     loc_mean=[.0,.0,.0,.0]
