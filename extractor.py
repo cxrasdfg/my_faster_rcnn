@@ -22,15 +22,24 @@ def main():
         device_id=cfg.device_id
         net.cuda(device_id)
     data_set=ExtractorDataset()
-    data_loader=DataLoader(data_set,batch_size=8,shuffle=False,drop_last=False)
+    data_loader=DataLoader(data_set,batch_size=1,shuffle=False,drop_last=False)
 
     for i,(imgs,boxes,labels,scale,idx) in tqdm(enumerate(data_loader)):
         if cfg.use_cuda:
             imgs=imgs.cuda(device_id)
         feat=net(imgs)
+        feat=feat.cpu().detach().numpy()
+        boxes=boxes.numpy()
+        labels=labels.numpy()
+        scale=scale.numpy()
+        idx=idx.numpy()
+
         for pos,num in enumerate(idx):
             fname='%s%d'% (cfg.feat_dir,num)
-            content={'feat':feat[pos],'box':boxes[pos],'label':labels[pos],'scale':scale[pos]}
+            content={'feat':feat[pos],
+                'box':boxes[pos],
+                'label':labels[pos],
+                'scale':scale[pos]}
             torch.save(content,fname)
 
 
