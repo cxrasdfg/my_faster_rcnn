@@ -23,7 +23,7 @@ ____
     - [-] catch up the paper's performance 
 
 - [-] Code Refactor
-    - [-] file categories
+    - [X] file categories
     - [-] deprecated code removal
 
 ## References:
