@@ -386,7 +386,7 @@ class FasterRCNN(torch.nn.Module):
         return rois,gt_loc,assign
 
 
-    def first_stage(self,x,img_size,num_prop_before,num_prop_after,scale,min_size=16):
+    def first_stage(self,x,img_size,num_prop_before,num_prop_after,scale,min_size=16,force_extract=False):
         r"""The first part of the network, including the feature extraction,
         and rpn forwarding
         Args:
@@ -411,7 +411,7 @@ class FasterRCNN(torch.nn.Module):
         img_size=img_size[0]
 
         t1=time.time()
-        if not cfg.use_offline_feat:
+        if force_extract or (not cfg.use_offline_feat):
             img_features=self.extractor(x) # [b,c,h,w]
         else:
             img_features=x
@@ -543,7 +543,7 @@ class FasterRCNN(torch.nn.Module):
 
         raise NotImplementedError()
 
-    def _suppres(self,boxes,prob,cls_num):
+    def _suppres(self,boxes,prob,cls_num,thresh=.5):
         r"""Suppresion for validation of the fast r-cnn
         Args:
             boxes (tensor): [M,cls_num,4]
@@ -564,7 +564,7 @@ class FasterRCNN(torch.nn.Module):
                 print(cls)
             box_cls=boxes[:,cls,:] # [M,4]
             prob_cls=prob[:,cls] # [M]
-            box_cls=self.nms(torch.cat([box_cls,prob_cls[:,None]],dim=1),.5) # [m',5]
+            box_cls=self.nms(torch.cat([box_cls,prob_cls[:,None]],dim=1),thresh) # [m',5]
             box_cls,prob_cls=box_cls[:,:4],box_cls[:,4] # [m',4], [m']
             res_boxes=torch.cat([res_boxes,box_cls],dim=0)
             res_labels= torch.cat([res_labels,
@@ -586,7 +586,7 @@ class FasterRCNN(torch.nn.Module):
 
         img_size,img_features,\
             anchors,out_rois,\
-            out_cls,sampled_rois=self.first_stage(x,current_size,6000,300,scale=1./ratios)        
+            out_cls,sampled_rois=self.first_stage(x,current_size,6000,300,scale=1./ratios,force_extract=True)        
 
         # roi pooling...
         x=self.roi_pooling(img_features,sampled_rois)
@@ -627,7 +627,6 @@ class FasterRCNN(torch.nn.Module):
            rois=torch.cat([extra_dim,rois],dim=1) # [M,1+4+cls_num] 
         return rois 
 
-        raise NotImplementedError()
 
     def convert_rpn_feature(self,x):
         """

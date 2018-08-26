@@ -98,11 +98,11 @@ def test_net():
     # img_src=cv2.imread("/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007/JPEGImages/000012.jpg")
     # img_src=cv2.imread('./example.jpg')
     img_src=cv2.imread('./dog.jpg') # BGR
-    img_src=img_src[:,:,::-1] # RGB
-    h,w,_=img_src.shape
-    img_src=img_src.transpose(2,0,1) # [c,h,w]
+    img=img_src[:,:,::-1] # RGB
+    h,w,_=img.shape
+    img=img.transpose(2,0,1) # [c,h,w]
 
-    img=preprocess(img_src)
+    img=preprocess(img)
     img=img[None]
     img=torch.tensor(img)
     if is_cuda:
@@ -139,4 +139,5 @@ def get_check_point():
 
 if __name__ == '__main__':
     # ttt()
-    train()
+    # train()
+    test_net()
