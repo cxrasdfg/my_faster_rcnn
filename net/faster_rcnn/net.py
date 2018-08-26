@@ -96,9 +96,9 @@ class FasterRCNN(torch.nn.Module):
             if 'conv' in name:
                 torch.nn.init.normal_(param.data,mean=0,std=0.01) # as the paper said, gausian distribution of mean=0, std=0.01
 
-        self.get_optimizer()
+        self.get_optimizer(lr=cfg.lr,use_adam=cfg.use_adam,weight_decay=cfg.weight_decay)
     
-    def get_optimizer(self,lr=1e-3,use_adam=False):
+    def get_optimizer(self,lr=1e-3,use_adam=False,weight_decay=0.0005):
         """
         return optimizer, It could be overwriten if you want to specify 
         special optimizer
@@ -118,7 +118,7 @@ class FasterRCNN(torch.nn.Module):
                 if 'bias' in key:
                     params += [{'params': [value], 'lr': lr * 2, 'weight_decay': 0}]
                 else:
-                    params += [{'params': [value], 'lr': lr, 'weight_decay': 0.0005}]
+                    params += [{'params': [value], 'lr': lr, 'weight_decay': weight_decay}]
         if use_adam:
             print("Using Adam optimizer")
             self.optimizer = torch.optim.Adam(params)

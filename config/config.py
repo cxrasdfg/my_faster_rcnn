@@ -21,4 +21,9 @@ class CFG():
     img_shorter_len=600
     img_longer_len=1000
 
+    lr=1e-3
+    weight_decay=0.0005
+    use_adam=False
+
+
 cfg=CFG()

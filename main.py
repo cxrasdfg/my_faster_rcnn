@@ -42,6 +42,7 @@ def train():
         else:
             net.load_state_dict(model)
         print("Using the model from the last check point:%s"%(w_path),end=" ")
+        epoch+=1
 
     net.train()
     is_cuda=cfg.use_cuda
@@ -64,15 +65,16 @@ def train():
                 scale=scale.cuda(did).float()
                 img_sizes=img_sizes.cuda(did).float()
             loss=net.train_once(imgs,boxes,labels,scale,img_sizes)
-            tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch+1,iteration,loss))
+            tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             iteration+=1
 
-        epoch+=1
         if cfg.use_offline_feat:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
         else:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
+
+        epoch+=1
 
 def test_net():
     data_set=TestDataset()
