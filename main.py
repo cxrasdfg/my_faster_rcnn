@@ -67,11 +67,12 @@ def train():
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             iteration+=1
+
+        epoch+=1
         if cfg.use_offline_feat:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
         else:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
-        epoch+=1
 
 def test_net():
     data_set=TestDataset()
