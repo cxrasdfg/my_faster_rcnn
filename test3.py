@@ -890,6 +890,20 @@ class MyNet(torch.nn.Module):
         return param_rois, labels
         raise NotImplementedError('you must implement the feature to roi')
     
+    def print_net_info(self):
+        print("****************\t NET STRUCTURE \t ****************")
+        print("********\t Extractor \t ********")
+        print(self.extractor)
+        print("********\t RPN \t ********")
+        print(self.rpn)
+        print("********\t ROI Detector\t ********")
+        print("\t FC-3-4 \t")
+        print(self.detector.fc_3_4)
+        print("\t Classifier \t ")
+        print(self.detector.classfier)
+        print("\t Box Regressor \t")
+        print(self.detector.box_reg)
+        print("****************\t NET INFO END  \t****************")
 
 def _smooth_l1_loss(x,gt,sigma):
     sigma2 = sigma ** 2
@@ -967,7 +981,8 @@ def main():
    
     # data_loader2=DataLoader(VOCDataset('/root/workspace/data/VOC2007_2012','train.txt',easy_mode=True),batch_size=1,shuffle=True,drop_last=False)
 
-    net=MyNet(data_set)
+    net=MyNet(data_set.classes)
+    net.print_net_info()
     # last_time_model='./model.pkl'
     epoch,iteration,w_path=get_check_point()
 
@@ -1038,7 +1053,7 @@ def test_net():
     data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
    
 
-    net=MyNet(data_set)
+    net=MyNet(data_set.classes)
     _,_,last_time_model=get_check_point()
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
