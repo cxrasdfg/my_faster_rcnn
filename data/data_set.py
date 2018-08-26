@@ -11,6 +11,7 @@ from config import cfg
 from torch.utils.data import Dataset  
 from skimage.transform import resize
 import numpy as np
+from config import cfg
 
 name_list=voc_utils.voc_bbox_label_names
 
@@ -113,9 +114,8 @@ class TrainSetExt(TrainDataset):
 
 class TestDataset(Dataset):
     classes=name_list
-    def __init__(self, opt, split='test', use_difficult=True):
-        self.cfg = cfg
-        self.sdb = VOCBboxDataset(opt.voc_data_dir, split=split, use_difficult=use_difficult)
+    def __init__(self, voc_data_dir=cfg.voc_dir, split='test', use_difficult=True):
+        self.sdb = VOCBboxDataset(voc_data_dir, split=split, use_difficult=use_difficult)
 
     def __getitem__(self, idx):
         ori_img= self.sdb._get_image(idx)
