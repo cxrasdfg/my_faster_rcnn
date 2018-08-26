@@ -64,7 +64,7 @@ def train():
                 scale=scale.cuda(did).float()
                 img_sizes=img_sizes.cuda(did).float()
             loss=net.train_once(imgs,boxes,labels,scale,img_sizes)
-            tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
+            tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch+1,iteration,loss))
 
             iteration+=1
 
