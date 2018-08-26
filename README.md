@@ -10,13 +10,13 @@ ____
     - [X] train basicly
     - [X] transform all the numpy codes to torch codes
 
-- [-] Use SDB Tool
-    - [-] use ChainerCV
-    - [-] add data augmentation
+- [X] Use SDB Tool
+    - [X] use ChainerCV
+    - [X] add data augmentation
 
-- [-] Use Pretrained Caffe Model
-    - [-] caffe normalization
-    - [-] bbox transformation normalization
+- [X] Use Pretrained Caffe Model
+    - [X] caffe normalization
+    - [X] bbox transformation normalization
 
 - [-] Add Evaluation
     - [-] use the pretrained caffe model(VGG16)
