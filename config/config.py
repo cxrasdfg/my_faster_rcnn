@@ -3,8 +3,12 @@
 class CFG():
     voc_dir='/root/workspace/data/VOC2007_2012/VOCdevkit/VOC2007'
 
-    feat_dir='./features/vgg16/'
-    use_offline_feat=True
+    train_feat_dir='./features/vgg16/train/'
+    train_use_offline_feat=True
+
+    test_feat_dir='./features/vgg16/test/'
+    test_use_offline_feat=True
+
     device_id=0
     use_cuda=True
 

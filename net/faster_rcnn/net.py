@@ -145,7 +145,7 @@ class FasterRCNN(torch.nn.Module):
         t1=time.time()
         img_size,img_feat,anchors,out_rois,\
             out_cls,sampled_rois \
-            = self.first_stage(imgs,img_sizes,12000,2000,scale)
+            = self.first_stage(imgs,img_sizes,12000,2000,scale,force_extract=False)
         
         # tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
         # if DEBUG:
@@ -386,7 +386,8 @@ class FasterRCNN(torch.nn.Module):
         return rois,gt_loc,assign
 
 
-    def first_stage(self,x,img_size,num_prop_before,num_prop_after,scale,min_size=16,force_extract=False):
+    def first_stage(self,x,img_size,num_prop_before,
+        num_prop_after,scale,min_size=16,force_extract=False):
         r"""The first part of the network, including the feature extraction,
         and rpn forwarding
         Args:
@@ -395,7 +396,8 @@ class FasterRCNN(torch.nn.Module):
             num_prop_before (int): remained rois for each image before sorting
             num_prop_after (int): remainted rois for each image after sorting
             scale (tensor[float]): [b,2] stores the scale for width and height...  
-            min_size(int): threshold for discarding the boxes...
+            min_size (int): threshold for discarding the boxes...
+            force_extract (bool): will forward the extractor network for x if enabled
         Return:
             img_size (shape): image width and height
             img_features (tensor): [b,c,h,w]
@@ -411,7 +413,7 @@ class FasterRCNN(torch.nn.Module):
         img_size=img_size[0]
 
         t1=time.time()
-        if force_extract or (not cfg.use_offline_feat):
+        if force_extract :
             img_features=self.extractor(x) # [b,c,h,w]
         else:
             img_features=x
@@ -579,23 +581,30 @@ class FasterRCNN(torch.nn.Module):
 
         return res_boxes,res_labels,res_prob
 
-    def forward(self,x,src_size):
+    def forward(self,x,src_size,offline_feat=False,cur_image_size=None):
         r""" Net Eval
         Args:
             x (tensor[float]): [b,c,h,w]
             src_size (tensor[int]) : [b,2]
+            offline_feat (bool): indicats the attr::`x` is from the offline...
+            cur_img_size (tensor) [b,2]: it will be ignored when attr::`offline_feat` is `False`
         Return:
             res (list): [b], the result boxes
         """
-        current_size=x.shape[2:][::-1]
-        current_size=torch.tensor(current_size)[None].expand(x.shape[0],-1) # [b,2]
-        current_size=current_size.type_as(x).float()
+        if offline_feat:
+            current_size=cur_image_size
+            assert current_size is not None
+        else:
+            current_size=x.shape[2:][::-1]
+            current_size=torch.tensor(current_size)[None].expand(x.shape[0],-1) # [b,2]
+            current_size=current_size.type_as(x).float()
         ratios=src_size/current_size.float() # [b,2]
         ratios=ratios[:,None].expand(-1,2,-1).contiguous().view(-1,4) # [b,4]
 
         img_size,img_features,\
             anchors,out_rois,\
-            out_cls,sampled_rois=self.first_stage(x,current_size,6000,300,scale=1./ratios,force_extract=True)        
+            out_cls,sampled_rois=self.first_stage(x,current_size,6000,300,
+                scale=1./ratios,force_extract= (not offline_feat) )        
 
         # roi pooling...
         x=self.roi_pooling(img_features,sampled_rois)

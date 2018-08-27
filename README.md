@@ -22,7 +22,7 @@ ____
     - [X] use the pretrained caffe model(VGG16)
     - [-] catch up the paper's performance 
 
-- [-] Code Refactor
+- [X] Code Refactor
     - [X] file categories
     - [X] deprecated code removal
 

@@ -101,12 +101,14 @@ class TrainDataset(Dataset):
 
 
 class TrainSetExt(TrainDataset):
+    r"""This dataset will use the extracted features of image in index `idx`
+    """
     def __init__(self):
         super(TrainSetExt,self).__init__()
     
     
     def __getitem__(self,idx):
-        offline_data= torch.load(cfg.feat_dir+str(idx))
+        offline_data= torch.load(cfg.train_feat_dir+str(idx))
 
         return offline_data['feat'],offline_data['box'],\
             offline_data['label'],offline_data['scale'],\
@@ -123,9 +125,21 @@ class TestDataset(Dataset):
         img = preprocess(ori_img)
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
-        return img, np.array(ori_img.shape[1:][::-1]), \
+        return img, np.array(ori_img.shape[1:][::-1]),np.array(img.shape[1:][::-1] ), \
             bbox, label.astype('long'), difficult.astype('int')
 
     def __len__(self):
         return len(self.sdb)
+
+class TestSetExt(TestDataset):
+    r"""This dataset will use the extracted features of image in index `idx`
+    """
+    def __init__(self):
+        super(TestSetExt,self).__init__()
+
+    def __getitem__(self,idx):
+        
+        _data=torch.load(cfg.test_feat_dir+str(idx))
+        return _data['feat'],_data['src_img_size'],_data['cur_img_size'],\
+            _data['box'],_data['label'],_data['diff'] 
 
