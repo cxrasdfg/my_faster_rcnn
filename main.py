@@ -221,6 +221,6 @@ def get_check_point():
 
 if __name__ == '__main__':
     # ttt()
-    # train()
+    train()
     # test_net()
-    eval_net()
+    # eval_net()

@@ -466,27 +466,38 @@ class FasterRCNN(torch.nn.Module):
             rois_masked=rois[i][scale_mask] # [N',4]
             out_cls_masked=out_cls[i][scale_mask] # [N',2]
 
-            # sort by the pos
             rois_i=rois_masked
             tt=out_cls_masked[:,0] # [N',1] idx 0 is the pos
+
             _,idx=tt.sort(descending=True)    
             idx=idx[:num_prop_before]
             tt=_[:num_prop_before][:,None]
             rois_i=rois_i[idx]
+
+            use_ext=True
+            # sort by the pos
+            if not use_ext:
+                temp=self.nms(torch.cat([rois_i,tt],dim=1),img_id=i) # [M,1+4+1]
+                # select top-N
+                # here 5 is the pos label
+                _,idx=temp[:,5].sort(descending=True) 
+                idx=idx[:num_prop_after]
+                temp=temp[idx]
+            else:
+                temp=torch.cat([rois_i,tt],dim=1) # [M,4+1]
+                keep_idx=ext_nms(temp, .7)
+                temp=temp[keep_idx] # keep_idx is already sorted
+
+                temp=temp[:num_prop_after] # [num_p_a,4+1]
+                extra_dim=torch.full([len(temp),1],i).type_as(temp)
+                temp=torch.cat([extra_dim,temp],dim=1) # [M',1+4+1]
             
-            temp=self.nms(torch.cat([rois_i,tt],dim=1),img_id=i) # [M,1+4+1]
-            
-            # select top-N
-            # here 5 is the pos label
-            _,idx=temp[:,5].sort(descending=True) 
-            idx=idx[:num_prop_after]
-            temp=temp[idx]
             rois_with_id=torch.cat([rois_with_id,temp], dim=0) # [M'+M,1+4+2]
 
         # print("Time of nms in first stage:%.3f" %(time.time()-t1))
 
         sampled_rois=rois_with_id[:,:1+4] # [n',1+4]
-        sampled_cls=rois_with_id[:,1+4:] # [n',cls_num]
+        # sampled_cls=rois_with_id[:,1+4:] # [n',cls_num]
 
         # select top-N
         # _,idx=labels[:,0].sort(descending=True)
