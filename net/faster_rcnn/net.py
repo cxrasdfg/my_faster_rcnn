@@ -280,7 +280,9 @@ class FasterRCNN(torch.nn.Module):
         return loss.item()
         
 
-    def anchor_target(self,anchors,gt_box,img_size,thresh_pos=.7,thresh_neg=.3):
+    def anchor_target(self,anchors,gt_box,img_size,
+            thresh_pos=cfg.rpn_thresh_pos,
+            thresh_neg=cfg.rpn_thresh_neg):
         r"""Assign the anchors to gt_box
         Args:
             anchors (tensor): [a,4]
@@ -337,8 +339,9 @@ class FasterRCNN(torch.nn.Module):
 
         return gt_loc,assign
 
-    def roi_target(self,rois,gt_box,label,pos_thresh=.5,
-                    neg_thresh_lo=.0,neg_thresh_hi=.5):
+    def roi_target(self,rois,gt_box,label,pos_thresh=cfg.rcnn_pos_thresh,
+                    neg_thresh_lo=cfg.rcnn_neg_thresh_lo,
+                    neg_thresh_hi=cfg.rcnn_neg_thresh_hi):
         r"""Assign roi to gt_box
         Args:
             rois (tensor): [a,4]

@@ -20,16 +20,29 @@ class CFG():
     
     loc_mean=[.0,.0,.0,.0]
     # loc_std=[.1,.1,.2,.2]
-    loc_std=[1.,1.,1.,1.]
+    loc_std=[5.,5.,10.,10.]
 
     img_shorter_len=600
     img_longer_len=1000
 
-    lr=1e-3
+    rand_seed=0
+    epochs=20
+    lr=1e-4
     weight_decay=0.0005
-    use_adam=False
+    use_adam=True
+    rpn_sigma=3.5
+    rcnn_sigma=1.
 
     out_thruth_thresh=.5
 
+    # rpn path
+    rpn_thresh_pos=.7
+    rpn_thresh_neg=.3
+
+    rcnn_pos_thresh=.5
+    rcnn_neg_thresh_lo=.1
+    rcnn_neg_thresh_hi=.5
+    
     eval_number=10000
+   
 cfg=CFG()

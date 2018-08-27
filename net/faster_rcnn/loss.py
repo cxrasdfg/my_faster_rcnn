@@ -2,6 +2,7 @@
 
 import torch
 from tqdm import tqdm
+from config import cfg
 
 def _smooth_l1_loss(x,gt,sigma):
     sigma2 = sigma ** 2
@@ -24,7 +25,7 @@ class RPNMultiLoss(torch.nn.Module):
 
         # smooth l1...
         # loss=cls_loss/n_cls+reg_loss*_lambda/n_reg
-        reg_loss=_smooth_l1_loss(out_box,gt_box,3.)
+        reg_loss=_smooth_l1_loss(out_box,gt_box,cfg.rpn_sigma)
         loss=cls_loss/n_cls+reg_loss/n_cls
 
         tqdm.write("rpn loss=%.5f: reg=%.5f, cls=%.5f" %(loss.item(),reg_loss.item(),cls_loss.item()),end=",\t ")
@@ -56,7 +57,7 @@ class FastRCnnLoss(torch.nn.Module):
             %(ttt,acc),end=",\t ")
 
         # smooth l1...
-        reg_loss=_smooth_l1_loss(out_box,gt_box,1.)
+        reg_loss=_smooth_l1_loss(out_box,gt_box,cfg.rcnn_sigma)
 
         loss=cls_loss/n_cls+reg_loss/n_cls
         # loss=cls_loss

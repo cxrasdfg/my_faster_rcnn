@@ -3,10 +3,11 @@
 
 import numpy as np 
 import torch
+from config import cfg
 
-np.random.seed(1234567)
-torch.manual_seed(1234567)
-torch.cuda.manual_seed(1234567)
+np.random.seed(cfg.rand_seed)
+torch.manual_seed(cfg.rand_seed)
+torch.cuda.manual_seed(cfg.rand_seed)
 
 from tqdm import tqdm
 import time
@@ -16,11 +17,11 @@ from show_bbox import show_img,tick_show,draw_bbox as draw_box
 from torchvision import transforms
 from torch.utils.data import Dataset,DataLoader
 from chainercv.evaluations import eval_detection_voc as voc_eval
-from config import cfg
 from data import TrainDataset,TestDataset,TrainSetExt,TestSetExt,preprocess
 from net import FasterRCNN as MyNet
 import cv2
 import re
+import sys
 
 def train():
     print("my name is van")
@@ -51,9 +52,7 @@ def train():
     if is_cuda:
         net.cuda(did)
     
-    epoches=int(1e6)
-   
-    while epoch<epoches:
+    while epoch<cfg.epochs:
         
         # train the rpn
         print('******epoch %d*********' % (epoch))
@@ -220,7 +219,13 @@ def get_check_point():
     return epoch,iteration,base_dir+w
 
 if __name__ == '__main__':
-    # ttt()
-    train()
-    # test_net()
-    # eval_net()
+    opt=sys.argv[1]
+    if opt=='train':
+        train()
+    elif opt=='test':
+        test_net()
+    elif opt=='eval':
+        eval_net()
+    else:
+        raise ValueError('opt shuold be in [`train`,`test`,`eval`]')
+    # train()
