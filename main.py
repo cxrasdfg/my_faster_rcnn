@@ -160,7 +160,10 @@ def eval_net():
     pred_classes=[]
     pred_scores=[]
 
-    for i,(img,sr_im_size,gt_box,label,diff) in enumerate(data_loader):
+    for i,(img,sr_im_size,gt_box,label,diff) in tqdm(enumerate(data_loader)):
+        if i> upper_bound:
+            break
+
         sr_im_size=sr_im_size.float()
         if is_cuda:
             img=img.cuda(did)
@@ -172,9 +175,6 @@ def eval_net():
         plabel=pred_class[prob_mask ].long()
         pprob=pred_prob[prob_mask]
 
-        if i> upper_bound:
-            break
-
         gt_bboxes += list(gt_box.numpy())
         gt_labels += list(label.numpy())
         gt_difficults += list(diff.numpy().astype('bool'))
@@ -182,6 +182,10 @@ def eval_net():
         pred_bboxes+=[pbox.cpu().detach().numpy()]
         pred_classes+=[plabel.cpu().numpy()]
         pred_scores+=[pprob.cpu().detach().numpy()]
+
+        # pred_bboxes+=[np.empty(0) ]
+        # pred_classes+=[np.empty(0) ]
+        # pred_scores+=[np.empty(0) ]
 
     res=voc_eval(pred_bboxes,pred_classes,pred_scores,
         gt_bboxes,gt_labels,gt_difficults,use_07_metric=True)

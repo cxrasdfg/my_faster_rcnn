@@ -560,11 +560,13 @@ class FasterRCNN(torch.nn.Module):
         res_labels=res_boxes.clone()
         res_prob=res_boxes.clone()
         for cls in range(cls_num):
-            if cls == 11:
-                print(cls)
+            # if cls == 11:
+                # print(cls)
             box_cls=boxes[:,cls,:] # [M,4]
             prob_cls=prob[:,cls] # [M]
             box_cls=self.nms(torch.cat([box_cls,prob_cls[:,None]],dim=1),thresh) # [m',5]
+            if len(box_cls)==0:
+                continue 
             box_cls,prob_cls=box_cls[:,:4],box_cls[:,4] # [m',4], [m']
             res_boxes=torch.cat([res_boxes,box_cls],dim=0)
             res_labels= torch.cat([res_labels,
