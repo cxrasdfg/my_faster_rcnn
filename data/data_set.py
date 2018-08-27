@@ -123,7 +123,8 @@ class TestDataset(Dataset):
         img = preprocess(ori_img)
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
-        return img, ori_img.shape[1:][::-1], bbox, label.astype('long'), difficult
+        return img, np.array(ori_img.shape[1:][::-1]), \
+            bbox, label.astype('long'), difficult.astype('int')
 
     def __len__(self):
         return len(self.sdb)

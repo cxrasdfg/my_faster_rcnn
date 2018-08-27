@@ -25,5 +25,7 @@ class CFG():
     weight_decay=0.0005
     use_adam=False
 
+    out_thruth_thresh=.5
 
+    eval_number=10000
 cfg=CFG()

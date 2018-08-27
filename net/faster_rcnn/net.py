@@ -578,6 +578,13 @@ class FasterRCNN(torch.nn.Module):
         return res_boxes,res_labels,res_prob
 
     def forward(self,x,src_size):
+        r""" Net Eval
+        Args:
+            x (tensor[float]): [b,c,h,w]
+            src_size (tensor[int]) : [b,2]
+        Return:
+            res (list): [b], the result boxes
+        """
         current_size=x.shape[2:][::-1]
         current_size=torch.tensor(current_size)[None].expand(x.shape[0],-1) # [b,2]
         current_size=current_size.type_as(x).float()

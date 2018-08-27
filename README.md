@@ -19,12 +19,12 @@ ____
     - [X] bbox transformation normalization
 
 - [-] Add Evaluation
-    - [-] use the pretrained caffe model(VGG16)
+    - [X] use the pretrained caffe model(VGG16)
     - [-] catch up the paper's performance 
 
 - [-] Code Refactor
     - [X] file categories
-    - [-] deprecated code removal
+    - [X] deprecated code removal
 
 ## References:
 + [Faster R-CNN(Paper)](https://arxiv.org/abs/1506.01497)

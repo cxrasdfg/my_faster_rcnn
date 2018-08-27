@@ -15,6 +15,7 @@ import os
 from show_bbox import show_img,tick_show,draw_bbox as draw_box
 from torchvision import transforms
 from torch.utils.data import Dataset,DataLoader
+from chainercv.evaluations import eval_detection_voc as voc_eval
 from config import cfg
 from data import TrainDataset,TestDataset,TrainSetExt,preprocess
 from net import FasterRCNN as MyNet
@@ -83,6 +84,9 @@ def test_net():
     classes=data_set.classes
     net=MyNet(classes)
     _,_,last_time_model=get_check_point()
+    # assign directly
+    # last_time_model='./weights/weights_21_110242'
+
     if os.path.exists(last_time_model):
         model=torch.load(last_time_model)
         if cfg.use_offline_feat:
@@ -108,9 +112,9 @@ def test_net():
     if is_cuda:
         net.cuda(did)
         img=img.cuda(did)
-    boxes,labels,probs=net(img,torch.tensor([w,h]).type_as(img))[0]
+    boxes,labels,probs=net(img,torch.tensor([[w,h]]).type_as(img))[0]
 
-    prob_mask=probs>.5
+    prob_mask=probs>cfg.out_thruth_thresh
     boxes=boxes[prob_mask ] 
     labels=labels[prob_mask ].long()
     probs=probs[prob_mask]
@@ -121,6 +125,68 @@ def test_net():
         )
     show_img(img_src,-1)
     
+def eval_net():
+    data_set=TestDataset()
+    data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
+
+    classes=data_set.classes
+    net=MyNet(classes)
+    _,_,last_time_model=get_check_point()
+    # assign directly
+    # last_time_model='./weights/weights_21_110242'
+
+    if os.path.exists(last_time_model):
+        model=torch.load(last_time_model)
+        if cfg.use_offline_feat:
+            net.load_state_dict(model)
+        else:
+            net.load_state_dict(model)
+        print("Using the model from the last check point:`%s`"%(last_time_model))
+    else:
+        raise ValueError("no model existed...")
+    net.eval()
+    is_cuda=cfg.use_cuda
+    did=cfg.device_id
+
+    if is_cuda:
+        net.cuda(did)
+
+    upper_bound=cfg.eval_number
+
+    gt_bboxes=[]
+    gt_labels=[]
+    gt_difficults=[]
+    pred_bboxes=[]
+    pred_classes=[]
+    pred_scores=[]
+
+    for i,(img,sr_im_size,gt_box,label,diff) in enumerate(data_loader):
+        sr_im_size=sr_im_size.float()
+        if is_cuda:
+            img=img.cuda(did)
+            im_size=sr_im_size.cuda(did)
+            
+        pred_box,pred_class,pred_prob=net(img,im_size)[0]
+        prob_mask=pred_prob>cfg.out_thruth_thresh
+        pbox=pred_box[prob_mask ] 
+        plabel=pred_class[prob_mask ].long()
+        pprob=pred_prob[prob_mask]
+
+        if i> upper_bound:
+            break
+
+        gt_bboxes += list(gt_box.numpy())
+        gt_labels += list(label.numpy())
+        gt_difficults += list(diff.numpy().astype('bool'))
+
+        pred_bboxes+=[pbox.cpu().detach().numpy()]
+        pred_classes+=[plabel.cpu().numpy()]
+        pred_scores+=[pprob.cpu().detach().numpy()]
+
+    res=voc_eval(pred_bboxes,pred_classes,pred_scores,
+        gt_bboxes,gt_labels,gt_difficults,use_07_metric=True)
+    print(res)
+
 
 def get_check_point():
     pat=re.compile("""weights_([\d]+)_([\d]+)""")
@@ -140,4 +206,5 @@ def get_check_point():
 if __name__ == '__main__':
     # ttt()
     # train()
-    test_net()
+    # test_net()
+    eval_net()
