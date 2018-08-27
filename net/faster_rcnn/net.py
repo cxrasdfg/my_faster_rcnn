@@ -128,7 +128,7 @@ class FasterRCNN(torch.nn.Module):
         return self.optimizer
 
         
-    def train_once(self,imgs,box,label,scale,img_sizes):
+    def train_once(self,imgs,box,label,scale,img_sizes,use_offline_feat=False):
         r"""Train the rpn and fast r-cnn together
         Args:
             imgs (tensor): [1,3,h,w]
@@ -145,7 +145,7 @@ class FasterRCNN(torch.nn.Module):
         t1=time.time()
         img_size,img_feat,anchors,out_rois,\
             out_cls,sampled_rois \
-            = self.first_stage(imgs,img_sizes,12000,2000,scale,force_extract=False)
+            = self.first_stage(imgs,img_sizes,12000,2000,scale,force_extract=(not use_offline_feat) )
         
         # tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
         # if DEBUG:

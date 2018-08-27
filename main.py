@@ -64,7 +64,7 @@ def train():
                 boxes=boxes.cuda(did)
                 scale=scale.cuda(did).float()
                 img_sizes=img_sizes.cuda(did).float()
-            loss=net.train_once(imgs,boxes,labels,scale,img_sizes)
+            loss=net.train_once(imgs,boxes,labels,scale,img_sizes,cfg.train_use_offline_feat)
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             iteration+=1
@@ -74,6 +74,8 @@ def train():
         else:
             torch.save(net.state_dict(),'%sweights_%d_%d'%(cfg.weights_dir,epoch,iteration) )
 
+        _map= eval_net(net=net,num=100,shuffle=True)['map']
+        print("map:",_map)
         epoch+=1
 
 def test_net():
@@ -124,12 +126,12 @@ def test_net():
         )
     show_img(img_src,-1)
     
-def eval_net(net=None,num=cfg.eval_number):
+def eval_net(net=None,num=cfg.eval_number,shuffle=False):
     if cfg.test_use_offline_feat:
         data_set=TestSetExt()
     else:
         data_set=TestDataset()
-    data_loader=DataLoader(data_set,batch_size=1,shuffle=False,drop_last=False)
+    data_loader=DataLoader(data_set,batch_size=1,shuffle=shuffle,drop_last=False)
     
     is_cuda=cfg.use_cuda
     did=cfg.device_id
@@ -177,7 +179,7 @@ def eval_net(net=None,num=cfg.eval_number):
             cur_im_size=cur_im_size.cuda(did)
             
         pred_box,pred_class,pred_prob=net(img,im_size,
-            offline_feat=True,cur_image_size=cur_im_size)[0]
+            offline_feat=cfg.test_use_offline_feat,cur_image_size=cur_im_size)[0]
         prob_mask=pred_prob>cfg.out_thruth_thresh
         pbox=pred_box[prob_mask ] 
         plabel=pred_class[prob_mask ].long()
@@ -197,10 +199,12 @@ def eval_net(net=None,num=cfg.eval_number):
 
     res=voc_eval(pred_bboxes,pred_classes,pred_scores,
         gt_bboxes,gt_labels,gt_difficults,use_07_metric=True)
-    print(res)
+    # print(res)
 
     # avoid potential error
     net.train()
+
+    return res
 
 
 def get_check_point():
