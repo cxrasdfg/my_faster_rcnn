@@ -26,7 +26,7 @@ class RPNMultiLoss(torch.nn.Module):
         # smooth l1...
         # loss=cls_loss/n_cls+reg_loss*_lambda/n_reg
         reg_loss=_smooth_l1_loss(out_box,gt_box,cfg.rpn_sigma)
-        loss=cls_loss/n_cls+reg_loss/n_cls
+        loss=cls_loss/n_cls+reg_loss/n_reg*_lambda
 
         tqdm.write("rpn loss=%.5f: reg=%.5f, cls=%.5f" %(loss.item(),reg_loss.item(),cls_loss.item()),end=",\t ")
         return loss
@@ -59,7 +59,8 @@ class FastRCnnLoss(torch.nn.Module):
         # smooth l1...
         reg_loss=_smooth_l1_loss(out_box,gt_box,cfg.rcnn_sigma)
 
-        loss=cls_loss/n_cls+reg_loss/n_cls
+        # loss=cls_loss/n_cls+reg_loss/num_pos*_lambda
+        loss=cls_loss/n_cls+reg_loss*_lambda/(num_pos**2)
         # loss=cls_loss
 
         return loss

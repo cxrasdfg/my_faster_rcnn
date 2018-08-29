@@ -77,6 +77,7 @@ def train():
         _map= eval_net(net=net,num=100,shuffle=True)['map']
         print("map:",_map)
         epoch+=1
+    print(eval_net(net=net))
 
 def test_net():
     data_set=TestDataset()
@@ -229,7 +230,7 @@ if __name__ == '__main__':
     elif opt=='test':
         test_net()
     elif opt=='eval':
-        eval_net()
+        print(eval_net())
     else:
         raise ValueError('opt shuold be in [`train`,`test`,`eval`]')
     # train()
