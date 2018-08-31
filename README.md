@@ -1,7 +1,14 @@
 # my_faster_rcnn
 
 Simple and short codes with pytorch, just for me to understand the procedure of faster r-cnn, ~~could run on windows~~ but the training procedure does not work well, to be continued...
+____
+## Detection Example
+![Image text](res.png)
 
+____
+## Performance
+I have tried my best to adjust the hyper-param and train for a lot of times..., but I only get 0.584 map 
+on VOC 2007 test dataset..., so sad... 
 ____
 ## TODO
 
@@ -20,7 +27,7 @@ ____
 
 - [-] Add Evaluation
     - [X] use the pretrained caffe model(VGG16)
-    - [-] catch up the paper's performance 
+    - [-] ~~catch up the paper's performance~~(Failed...Give up) 
 
 - [X] Code Refactor
     - [X] file categories
