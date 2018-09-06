@@ -17,6 +17,7 @@ import cv2
 name_list=voc_utils.voc_bbox_label_names
 
 def torch_normalize(img):
+    assert img.max()<=1.0
     img=img/255.0
     img=torch.tensor(img).float()
     img=torchvision.transforms.Normalize(mean=[0.485,0.456,0.406],
@@ -25,6 +26,7 @@ def torch_normalize(img):
     return img.numpy()
 
 def caffe_normalize(img):
+    assert img.max()<=1.0
     img = img[[2, 1, 0], :, :]  # RGB-BGR
     mean = np.array([122.7717, 115.9465, 102.9801]).reshape(3, 1, 1)
     img=img*255.0
@@ -47,7 +49,10 @@ def preprocess(img,min_size=cfg.img_shorter_len,
 
     # NOTE check the value range
     img=img.transpose(1,2,0) # [h,w,c]
-    img=cv2.resize(img,(int(w*scale[0]),int(h*scale[1])),interpolation=cv2.INTER_LINEAR )
+    if not easy_mode:
+        img=cv2.resize(img,(int(w*scale[0]),int(h*scale[1])),interpolation=cv2.INTER_LINEAR )
+    else:
+        img=cv2.resize(img,(easy_h_w,easy_h_w ),interpolation=cv2.INTER_LINEAR )
     img=img/255.0
     img=img.transpose(2,0,1) # [c,h,w]
 
