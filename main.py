@@ -23,6 +23,18 @@ import cv2
 import re
 import sys
 
+
+def adjust_lr(opt,iters,lrs=cfg.lrs):
+    lr=0
+    for k,v in lrs.items():
+        lr=v
+        if iters<int(k):
+            break
+
+    for param_group in opt.param_groups:
+        
+        param_group['lr'] = lr
+
 def train():
     print("my name is van")
     # let the random counld be the same
@@ -67,6 +79,7 @@ def train():
             loss=net.train_once(imgs,boxes,labels,scale,img_sizes,cfg.train_use_offline_feat)
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
+            adjust_lr(net.optimizer,iteration,cfg.lrs)
             iteration+=1
 
         if cfg.train_use_offline_feat:

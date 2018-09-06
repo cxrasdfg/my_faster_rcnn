@@ -31,6 +31,7 @@ class CFG():
     rand_seed=0
     epochs=35
     lr=1e-3
+    lrs={'60000':lr,'80000':lr/10.}
     weight_decay=0.0005
     use_adam=False
     rpn_sigma=1.
