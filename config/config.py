@@ -25,8 +25,10 @@ class CFG():
     img_shorter_len=600
     img_longer_len=1000
 
-    batch_size=1
-    num_workers=0
+    batch_size=16
+    num_workers=4
+    input_size=600
+    feat_size=37 # this depends on input_size
 
     rand_seed=0
     epochs=35

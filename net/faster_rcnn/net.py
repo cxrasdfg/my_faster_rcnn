@@ -128,24 +128,25 @@ class FasterRCNN(torch.nn.Module):
         return self.optimizer
 
         
-    def train_once(self,imgs,box,label,scale,img_sizes,use_offline_feat=False):
+    def train_once(self,imgs,boxes,labels,num_boxes,scales,img_sizes,use_offline_feat=False):
         r"""Train the rpn and fast r-cnn together
         Args:
-            imgs (tensor): [1,3,h,w]
-            box (tensor): [1,N,4]
-            label (tensor): [1,N]
-            scale (tensor): [1,2] scale for width and height 
-            img_sizes (tensor): [1,2] images sizes
+            imgs (tensor): [b,3,h,w]
+            boxes (tensor[float32]): [b,100,4], boxes in fixed length 
+            labels (tensor[long]): [b,100], label in fixed length 
+            num_boxes (tensor[long]): [b], number of valid boxes...
+            scales (tensor): [b,2] scale for width and height 
+            img_sizes (tensor): [b,2] images sizes
         """
-        assert imgs.shape[0] == 1
-        assert box.shape[0]==1
-
+        # assert imgs.shape[0] == 1
+        # assert box.shape[0]==1
+        b,_,_,_=imgs.shape
         # return self.only_train_cls(imgs,box,label)
 
         t1=time.time()
         img_size,img_feat,anchors,out_rois,\
-            out_cls,sampled_rois \
-            = self.first_stage(imgs,img_sizes,12000,2000,scale,force_extract=(not use_offline_feat) )
+            out_clses,sampled_rois \
+            = self.first_stage(imgs,img_sizes,12000,2000,scales,force_extract=(not use_offline_feat) )
         
         # tqdm.write("max of img_feat:%.5f, sum of img_feat:%.5f"%(img_feat.max(),img_feat.sum()), end=",\t ")
         # if DEBUG:
@@ -153,117 +154,143 @@ class FasterRCNN(torch.nn.Module):
         
         # print('Time of first stage:%.3f' %(time.time()-t1))
         # since the batch_size=1
-        anchors=anchors[0] # [N,4]
-        box=box[0] # [N,4]
-        label=label[0] # [N] 
-        out_cls=out_cls[0]
-        out_rois=out_rois[0]
+        b_out_pos_cls=[]
+        b_out_neg_cls=[]
+        b_out_pred_box=[]
+        b_gt_box=[]
+        for i in range(b):
+            anchor=anchors[i] # [N,4]
+            num_box=num_boxes[i]
+            box=boxes[i][:num_box] # [N,4]
+            label=labels[i,:num_box] # [N] 
+            out_cls=out_clses[i]
+            out_roi=out_rois[i]
 
-        #################### RPN #####################
-        # match the anchor to gt box
-        t1=time.time()
-        gt_loc,assign=self.anchor_target(anchors,box,img_size)
-        # print('Time of anchor matching:%.3f' %(time.time()-t1)) 
+            #################### RPN #####################
+            # match the anchor to gt box
+            t1=time.time()
+            gt_loc,assign=self.anchor_target(anchor,box,img_size)
+            # print('Time of anchor matching:%.3f' %(time.time()-t1)) 
 
-        # rpn loss
-        pos_mask=(assign==1)
-        neg_mask=(assign==0)
-        pos_cls=out_cls[pos_mask]
-        neg_cls=out_cls[neg_mask]
-        pos_out_box=out_rois[pos_mask]
-        gt_loc=gt_loc[pos_mask]
+            # rpn loss
+            pos_mask=(assign==1)
+            neg_mask=(assign==0)
+            pos_cls=out_cls[pos_mask]
+            neg_cls=out_cls[neg_mask]
+            pos_out_box=out_roi[pos_mask]
+            gt_loc=gt_loc[pos_mask]
 
-        # prepare the loss parameters
-        # for first 128 positive samples (for classification)
-        pos_rand_idx=torch.randperm(len(pos_cls))
-        pos_rand_idx=pos_rand_idx[:128] 
-        # for the rest negative samples (for clssification)
-        neg_rand_idx=torch.randperm(len(neg_cls))
-        neg_rand_idx=neg_rand_idx[:256-len(pos_rand_idx)]
-        
-        tqdm.write("RPN matching: %d pos, %d neg"%(len(pos_rand_idx),len(neg_rand_idx) ),end=",\t ")
-        # prepare parameters for loss function
-        # localtion parameters
-        out_pred_box=pos_out_box[pos_rand_idx]
-        gt_box=gt_loc[pos_rand_idx]
+            # prepare the loss parameters
+            # for first 128 positive samples (for classification)
+            pos_rand_idx=torch.randperm(len(pos_cls))
+            pos_rand_idx=pos_rand_idx[:128] 
+            # for the rest negative samples (for clssification)
+            neg_rand_idx=torch.randperm(len(neg_cls))
+            neg_rand_idx=neg_rand_idx[:256-len(pos_rand_idx)]
+            
+            tqdm.write("RPN matching: %d pos, %d neg"%(len(pos_rand_idx),len(neg_rand_idx) ),end=",\t ")
+            # prepare parameters for loss function
+            # localtion parameters
+            out_pred_box=pos_out_box[pos_rand_idx]
+            gt_box=gt_loc[pos_rand_idx]
 
-        # class parameters
-        out_pos_cls= pos_cls[pos_rand_idx]
-        out_neg_cls= neg_cls[neg_rand_idx]
+            # class parameters
+            out_pos_cls= pos_cls[pos_rand_idx]
+            out_neg_cls= neg_cls[neg_rand_idx]
+
+            b_out_pos_cls.append(out_pos_cls)
+            b_out_neg_cls.append(out_neg_cls)
+            b_out_pred_box.append(out_pred_box)
+            b_gt_box.append(gt_box)
         
         loss=0
-        loss=self.rpn_loss(out_pos_cls,
-            out_neg_cls,
-            out_pred_box,
-            gt_box,
-            len(anchors)//len(self.loc_anchors))
+        loss=self.rpn_loss(b_out_pos_cls,
+            b_out_neg_cls,
+            b_out_pred_box,
+            b_gt_box,
+            len(anchor)//len(self.loc_anchors))
         
+        b_out_pos_cls=[]
+        b_pos_rois_corresbonding_gt_label=[]
+        b_out_neg_cls=[]
+        b_out_reg_box=[]
+        b_target_box=[]
 
-        ################# fast r-cnn #####################
-        # fast r-cnn         
-        t1=time.time()
-        rois,gt_loc,assign= self.roi_target(sampled_rois[:,1:],box,label)
+        for i in range(b):
+            ################# fast r-cnn #####################
+            # fast r-cnn         
+            t1=time.time()
+            num_box=num_boxes[i]
+            box=boxes[i][:num_box]
+            label=labels[i][:num_box]
+            rois,gt_loc,assign= self.roi_target(sampled_rois[sampled_rois[:,0]==i][:,1:],box,label)
 
-        # print("Time of roi matching:%.3f" %(time.time()-t1))
-        # since batch_size=1, img_id is always 0
-        _col=torch.zeros(len(rois),1).type_as(rois)
-        rois=torch.cat([_col,rois],dim=1)
+            # print("Time of roi matching:%.3f" %(time.time()-t1))
+            _col=torch.full([len(rois),1],i).type_as(rois)
+            rois=torch.cat([_col,rois],dim=1)
 
-        pos_mask=(assign>0)
-        neg_mask=(assign==0)
-        pos_roi=rois[pos_mask]
-        pos_label=assign[pos_mask]
-        neg_roi=rois[neg_mask]
-        neg_label=assign[neg_mask]
-        pos_gt_loc=gt_loc[pos_mask]
+            pos_mask=(assign>0)
+            neg_mask=(assign==0)
+            pos_roi=rois[pos_mask]
+            pos_label=assign[pos_mask]
+            neg_roi=rois[neg_mask]
+            neg_label=assign[neg_mask]
+            pos_gt_loc=gt_loc[pos_mask]
+            
+            ###############
+            # chaneg the incices, select 32 positive and 96 negative
+            pos_rand_idx=torch.randperm(len(pos_roi))[:32]
+            neg_rand_idx=torch.randperm(len(neg_roi))[:128-len(pos_rand_idx)]
+
+            # prepare the box 
+            pos_rois=pos_roi[pos_rand_idx]
+            target_box=pos_gt_loc[pos_rand_idx]
+            pos_rois_corresbonding_gt_label=pos_label[pos_rand_idx]
+            neg_rois=neg_roi[neg_rand_idx]
+
+            # number
+            num_pos_roi=len(pos_rois)
+            num_neg_roi=len(neg_rois)
+
+            tqdm.write("fast r-cnn matching: %d pos, %d neg"%(num_pos_roi,num_neg_roi) ,end=",\t ")
+            # get the roi pooling featres
+            t1=time.time()
+            
+            # NOTE find the memory leak...
+            x=RoIPooling2D(self.roi_size[0],self.roi_size[1],1.0/self.stride)(img_feat,torch.cat([pos_rois,neg_rois],dim=0) ) # [num_pos_roi+num_neg_roi,c,7,7]
+            # print("Time of roi pooling:%.3f"%(time.time()-t1))
+            # tqdm.write("max of roi pooling:%.5f, sum of roi pooling:%.5f"%(
+            #     x.max(),x.sum()), end=",\t "
+            #     )
+
+
+            # [num_pos_rois+num_neg_roi,1+obj_cls_num], [num_pos_roi+num_neg_roi,4]
+            out_cls,out_reg_box=self.detector(x)  
+
+            # the img_id is useless, so remove it
+            pos_rois=pos_rois[:,1:]
         
-        ###############
-        # chaneg the incices, select 32 positive and 96 negative
-        pos_rand_idx=torch.randperm(len(pos_roi))[:32]
-        neg_rand_idx=torch.randperm(len(neg_roi))[:128-len(pos_rand_idx)]
+            out_reg_box=out_reg_box[:num_pos_roi] # [n',4*cls_num]
+            
+            # NOTE: out box is cls-wise box, we need to select the box
+            out_reg_box=out_reg_box.view(len(out_reg_box),-1,4) # [n',cls_num,4]
 
-        # prepare the box 
-        pos_rois=pos_roi[pos_rand_idx]
-        target_box=pos_gt_loc[pos_rand_idx]
-        pos_rois_corresbonding_gt_label=pos_label[pos_rand_idx]
-        neg_rois=neg_roi[neg_rand_idx]
+            # [n',4]
+            out_reg_box=out_reg_box[torch.arange(num_pos_roi).long(),
+                pos_rois_corresbonding_gt_label-1] # -1 since the box reg branch obly has cls_num classes
 
-        # number
-        num_pos_roi=len(pos_rois)
-        num_neg_roi=len(neg_rois)
+            out_pos_cls=out_cls[:num_pos_roi]
+            out_neg_cls=out_cls[num_pos_roi:]
+            
+            b_out_pos_cls.append(out_pos_cls)
+            b_pos_rois_corresbonding_gt_label.append(pos_rois_corresbonding_gt_label)
+            b_out_neg_cls.append(out_neg_cls)
+            b_out_reg_box.append(out_reg_box)
+            b_target_box.append(target_box)
 
-        tqdm.write("fast r-cnn matching: %d pos, %d neg"%(num_pos_roi,num_neg_roi) ,end=",\t ")
-        # get the roi pooling featres
-        t1=time.time()
-        
-        # NOTE find the memory leak...
-        x=self.roi_pooling(img_feat,torch.cat([pos_rois,neg_rois],dim=0) ) # [num_pos_roi+num_neg_roi,c,7,7]
-        # print("Time of roi pooling:%.3f"%(time.time()-t1))
-        # tqdm.write("max of roi pooling:%.5f, sum of roi pooling:%.5f"%(
-        #     x.max(),x.sum()), end=",\t "
-        #     )
-
-
-        # [num_pos_rois+num_neg_roi,1+obj_cls_num], [num_pos_roi+num_neg_roi,4]
-        out_cls,out_reg_box=self.detector(x)  
-
-        # the img_id is useless, so remove it
-        pos_rois=pos_rois[:,1:]
-       
-        out_reg_box=out_reg_box[:num_pos_roi] # [n',4*cls_num]
-        
-        # NOTE: out box is cls-wise box, we need to select the box
-        out_reg_box=out_reg_box.view(len(out_reg_box),-1,4) # [n',cls_num,4]
-
-        # [n',4]
-        out_reg_box=out_reg_box[torch.arange(num_pos_roi).long(),
-            pos_rois_corresbonding_gt_label-1] # -1 since the box reg branch obly has cls_num classes
-
-        out_pos_cls=out_cls[:num_pos_roi]
-        out_neg_cls=out_cls[num_pos_roi:]
-        rcnn_loss=self.fast_rcnn_loss(out_pos_cls,
-            pos_rois_corresbonding_gt_label,
-            out_neg_cls,out_reg_box,target_box)
+        rcnn_loss=self.fast_rcnn_loss(b_out_pos_cls,
+            b_pos_rois_corresbonding_gt_label,
+            b_out_neg_cls,b_out_reg_box,b_target_box)
 
         loss+=rcnn_loss
         tqdm.write("fast r-cnn loss:%.5f" %(rcnn_loss.item()) ,end=',\t ')

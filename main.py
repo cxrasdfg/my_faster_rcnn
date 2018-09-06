@@ -43,7 +43,12 @@ def train():
         data_set=TrainSetExt()
     else:
         data_set=TrainDataset()
-    data_loader=DataLoader(data_set,batch_size=1,shuffle=True,drop_last=False)
+    data_loader=DataLoader(
+        data_set,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        drop_last=False,
+        num_workers=cfg.num_workers)
 
     net=MyNet(data_set.classes)
     net.print_net_info()
@@ -69,14 +74,14 @@ def train():
         # train the rpn
         print('******epoch %d*********' % (epoch))
 
-        for i,(imgs,boxes,labels,scale,img_sizes) in tqdm(enumerate(data_loader)):
+        for i,(imgs,boxes,labels,num_box,scale,img_sizes) in tqdm(enumerate(data_loader)):
             if is_cuda:
                 imgs=imgs.cuda(did)
                 labels=labels.cuda(did)
                 boxes=boxes.cuda(did)
                 scale=scale.cuda(did).float()
                 img_sizes=img_sizes.cuda(did).float()
-            loss=net.train_once(imgs,boxes,labels,scale,img_sizes,cfg.train_use_offline_feat)
+            loss=net.train_once(imgs,boxes,labels,num_box,scale,img_sizes,cfg.train_use_offline_feat)
             tqdm.write('Epoch:%d, iter:%d, loss:%.5f'%(epoch,iteration,loss))
 
             adjust_lr(net.optimizer,iteration,cfg.lrs)
@@ -237,7 +242,10 @@ def get_check_point():
     return epoch,iteration,base_dir+w
 
 if __name__ == '__main__':
-    opt=sys.argv[1]
+    if len(sys.argv) ==1 :
+        opt='train'
+    else:
+        opt=sys.argv[1]
     if opt=='train':
         train()
     elif opt=='test':

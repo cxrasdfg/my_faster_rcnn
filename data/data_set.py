@@ -9,9 +9,10 @@ from chainercv.transforms import random_flip
 from chainercv.transforms import flip_bbox
 from config import cfg
 from torch.utils.data import Dataset  
-from skimage.transform import resize
+# from skimage.transform import resize
 import numpy as np
 from config import cfg
+import cv2
 
 name_list=voc_utils.voc_bbox_label_names
 
@@ -31,7 +32,7 @@ def caffe_normalize(img):
     return img
 
 def preprocess(img,min_size=cfg.img_shorter_len,
-        max_size=cfg.img_longer_len,easy_mode=False,easy_h_w=416):
+        max_size=cfg.img_longer_len,easy_mode=True,easy_h_w=cfg.input_size):
 
     c,h,w=img.shape
     if not easy_mode:
@@ -45,8 +46,10 @@ def preprocess(img,min_size=cfg.img_shorter_len,
         scale=(1.0*easy_h_w/w,1.0*easy_h_w/h)
 
     # NOTE check the value range
+    img=img.transpose(1,2,0) # [h,w,c]
+    img=cv2.resize(img,(int(w*scale[0]),int(h*scale[1])),interpolation=cv2.INTER_LINEAR )
     img=img/255.0
-    img=resize(img,(c,h*scale[1],w*scale[0]),mode='reflect')
+    img=img.transpose(2,0,1) # [c,h,w]
 
     if cfg.use_caffe:
         img=caffe_normalize(img)
@@ -62,7 +65,7 @@ class Transform(object):
     def __call__(self, in_data):
         img, bbox, label = in_data
         _, H, W = img.shape
-        img = preprocess(img, self.min_size, self.max_size)
+        img = preprocess(img,easy_mode=True,easy_h_w=cfg.input_size)
         _, o_H, o_W = img.shape
         scale = o_H / H
         bbox = resize_bbox(bbox, (H, W), (o_H, o_W))
@@ -80,7 +83,7 @@ class TrainDataset(Dataset):
     def __init__(self):
         self.cfg=cfg
         self.sdb=VOCBboxDataset(cfg.voc_dir,'trainval')
-        self.trans=Transform(min_size=cfg.img_shorter_len,max_size=cfg.img_longer_len )
+        self.trans=Transform()
     
     def __getitem__(self,idx):
         # NOTE: sdb returns the `yxyx`...
@@ -93,13 +96,21 @@ class TrainDataset(Dataset):
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
         cur_img_size=img.shape[1:][::-1]
-        return img.copy(), bbox.copy(), label.astype('long'), np.array(scale),np.array(cur_img_size)
+        
+        temp_box=torch.full([100,4],0)
+        num_box=len(bbox)
+        temp_box[:num_box]=torch.tensor(bbox).float()
+        temp_label=torch.full([100],-1).long()
+        temp_label[:num_box]=torch.tensor(label).long()
+        num_box=torch.tensor(num_box).long()
+        return img.copy(), temp_box,temp_label,num_box,\
+            np.array(scale),np.array(cur_img_size)
 
 
     def __len__(self):
         return len(self.sdb)
 
-
+@DeprecationWarning
 class TrainSetExt(TrainDataset):
     r"""This dataset will use the extracted features of image in index `idx`
     """
@@ -122,7 +133,7 @@ class TestDataset(Dataset):
     def __getitem__(self, idx):
         ori_img= self.sdb._get_image(idx)
         bbox,label,difficult=self.sdb._get_annotations(idx)
-        img = preprocess(ori_img)
+        img = preprocess(ori_img,easy_mode=True,easy_h_w=cfg.input_size)
         bbox=bbox.copy()
         bbox=bbox[:,[1,0,3,2]] # change `yxyx` to `xyxy`
         return img, np.array(ori_img.shape[1:][::-1]),np.array(img.shape[1:][::-1] ), \
@@ -131,6 +142,7 @@ class TestDataset(Dataset):
     def __len__(self):
         return len(self.sdb)
 
+@DeprecationWarning
 class TestSetExt(TestDataset):
     r"""This dataset will use the extracted features of image in index `idx`
     """
