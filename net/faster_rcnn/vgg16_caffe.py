@@ -23,8 +23,9 @@ def decom_vgg16():
     classifier = torch.nn.Sequential(*classifier)
 
     # freeze top4 conv
-    for layer in features[:10]:
-        for p in layer.parameters():
-            p.requires_grad = False
+    if cfg.freeze_top:    
+        for layer in features[:10]:
+            for p in layer.parameters():
+                p.requires_grad = False
 
     return torch.nn.Sequential(*features), classifier

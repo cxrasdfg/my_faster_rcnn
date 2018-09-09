@@ -20,18 +20,19 @@ class CFG():
     
     loc_mean=[.0,.0,.0,.0]
     # loc_std=[.1,.1,.2,.2]
-    loc_std=[2.,2.,4.,4.]
+    loc_std=[1.,1.,2.,2.]
 
     img_shorter_len=600
     img_longer_len=1000
 
-    batch_size=16
-    num_workers=4
-    input_size=600
+    freeze_top=False
+    batch_size=2
+    num_workers=2
+    input_size=1000
     feat_size=37 # this depends on input_size
 
     rand_seed=0
-    epochs=35
+    epochs=100
     lr=1e-3
     lrs={'60000':lr,'80000':lr/10.}
     weight_decay=0.0005
